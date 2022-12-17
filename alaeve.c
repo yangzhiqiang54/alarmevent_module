@@ -10,6 +10,7 @@
 
 #include "alaeve.h"
 #include "cJSON.h"
+#include "stdio.h"
 
 /* 宏定义 */
 
@@ -23,6 +24,16 @@ ae_info_t ae_info; //模块全局信息记录
 int ae_init(void) {
     
 
+}
+
+char *cjosn_out = NULL;
+void main(char argc, char* agrv[]) {
+    cJSON *root = cJSON_CreateObject();
+
+    cJSON_AddItemToObject(root, "abc", cJSON_CreateNumber(123.456789));
+    cjosn_out = cJSON_Print(root);
+
+    printf("json:\n%s\n", cjosn_out);
 }
 
 
