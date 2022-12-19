@@ -17,6 +17,7 @@
 #include "stdio.h"
 #include "string.h"
 #include "stdlib.h"
+#include "sys/stat.h"
 
 /* 宏定义 */
 
@@ -45,21 +46,38 @@ int ae_init(void)
     memset(&ae_info, 0, sizeof(ae_info_t));
 }
 
-char *cjosn_out = NULL;
+/* 将配置文件内容解析到内存的ae结构体中 */
+int ae_pares_config(void) {
+
+
+}
+
+
 void main(char argc, char *agrv[])
 {
     FILE *fp = NULL;
-    int rw = 0;
+    char *fbuf = NULL;
+    int rw = 0, file_size = 0;
+    struct stat stat_temp;
 
-    fp = fopen("./RULE.json", "r");
+    /* 读取文件 */
+    stat(".\\RULE.json", &stat_temp);
+    file_size = stat_temp.st_size;
 
-    cJSON *root = cJSON_CreateObject();
+    fbuf = malloc(file_size+1);
+    memset(fbuf, 0, file_size+1);
 
-    cJSON_AddItemToObject(root, "abc", cJSON_CreateString("hello"));
-    cjosn_out = cJSON_Print(root);
-
+    fp = fopen(".\\RULE.json", "r");
+    if(fp == NULL) {
+        return;
+    }
+    rw = fread(fbuf, 1, file_size, fp);
+    fclose(fp);
     
+    /* 解析JSON数据 */
+    cJSON *root = cJSON_Parse(fbuf);
+    free(fbuf);
 
-    printf("json:\n%s\n", cjosn_out);
+    return;
 }
 
