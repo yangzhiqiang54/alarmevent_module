@@ -1,0 +1,26 @@
+{
+    "headInfo": {
+        "confName": "yzq_gw1",
+        "confVer": "",
+        "confCreate": "2022-11-09 01:24",
+        "confModify": "2022-11-09 01:24",
+        "projectName": "yzq_prj2"
+    },
+    "rule": [
+        ">300"
+    ],
+    "rule_out": [
+        ""
+    ],
+    "trans1": {
+        "varList": [
+            {
+                "portId": 1,
+                "devId": 0,
+                "dataId": {
+                    "PT_1": 1
+                }
+            }
+        ]
+    }
+}
