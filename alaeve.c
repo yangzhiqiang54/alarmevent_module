@@ -226,7 +226,7 @@ void main(char argc, char *agrv[])
         goto EXIT;
     }
     ae_eu_result_t res = ae_parse_config(root);
-    
+    cJSON_Delete(root);
 
     EXIT:
     return;
