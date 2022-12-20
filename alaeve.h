@@ -3,11 +3,7 @@
 
 #include "stdint.h"
 
-typedef struct ae_info_t {
-    uint16_t num; //±¨¾¯ÅÐ¶Ï×ÜÊý
 
-
-}ae_info_t;
 
 
 

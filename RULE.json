@@ -7,10 +7,28 @@
         "projectName": "yzq_prj2"
     },
     "rule": [
-        ">300"
+        "Ua>300",
+        "P>1 & Ia>0.5"
     ],
     "rule_out": [
-        ""
+        "method=alarm",
+        "method=notice"
+    ],
+    "rule_para": [
+        {
+            "switch": true,
+            "period": 5,
+            "type": "normal",
+            "p1": "high",
+            "p2": "sud",
+            "p3": "big"
+        },
+        {
+            "switch": true,
+            "period": 10,
+            "type": "pair",
+            "p1": "s1e0"
+        }
     ],
     "trans1": {
         "varList": [
