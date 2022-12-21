@@ -17,6 +17,7 @@
     "rule_para": [
         {
             "switch": true,
+            "tid":1,
             "period": 5,
             "type": "normal",
             "p1": "high",
@@ -25,20 +26,14 @@
         },
         {
             "switch": true,
+            "tid":1,
             "period": 10,
             "type": "pair",
             "p1": "s1e0"
         }
     ],
-    "trans1": {
-        "varList": [
-            {
-                "portId": 1,
-                "devId": 0,
-                "dataId": {
-                    "PT_1": 1
-                }
-            }
-        ]
-    }
+    "rule_dev": [
+        [1,2],
+        [3,4]
+    ]
 }
