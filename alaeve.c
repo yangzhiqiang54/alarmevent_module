@@ -31,7 +31,7 @@ typedef enum {
 
 typedef enum {
     AE_TYPE_NORMAL = 0,
-    AE_TYPE_PAIA = 1,
+    AE_TYPE_PAIR = 1,
 }ae_eu_type_t;
 /****end****/
 
@@ -43,6 +43,7 @@ typedef struct ae_para_t {
     ae_eu_type_t type; //类型 枚举 配置中固定字符串
     char *para_string;
     uint8_t para_flag; //报警参数 bit0:开关
+    uint8_t trans_id; //转发ID
 }ae_para_t;
 
 typedef struct ae_rule_t {
@@ -54,7 +55,6 @@ typedef struct ae_rule_t {
 
 typedef struct ae_info_t {
     uint16_t num; //报警判断总数
-    ae_rule_t * arr_rule; //报警事件结构体数组
 }ae_info_t;
 
 typedef struct ae_type_table_t {
@@ -65,13 +65,14 @@ typedef struct ae_type_table_t {
 
 /* 变量 */
 ae_info_t ae_info; // 模块全局信息记录
+ae_rule_t * ae_arr_rule; //报警事件结构体数组
 /****end****/
 
 /* 报警类型与字符串映射表 */
 #define AE_TYPE_TABLE_NUM 2
 ae_type_table_t ae_type_table[AE_TYPE_TABLE_NUM] = {
     {AE_TYPE_NORMAL,    "normal"},
-    {AE_TYPE_PAIA,      "pair"}
+    {AE_TYPE_PAIR,      "pair"}
 };
 
 
@@ -133,9 +134,9 @@ static ae_eu_result_t ae_parse_config(cJSON * json_root) {
     }
     
     /* 给报警事件结构体申请动态内存 */
-    ae_info.arr_rule = malloc(sizeof(ae_rule_t) * ae_info.num);
-    memset(ae_info.arr_rule, 0, (sizeof(ae_rule_t) * ae_info.num));
-    if(ae_info.arr_rule == NULL) {
+    ae_arr_rule = malloc(sizeof(ae_rule_t) * ae_info.num);
+    memset(ae_arr_rule, 0, (sizeof(ae_rule_t) * ae_info.num));
+    if(ae_arr_rule == NULL) {
         res = AE_JSON_ERROR;
         goto ERR_EXIT;
     }
@@ -143,20 +144,23 @@ static ae_eu_result_t ae_parse_config(cJSON * json_root) {
     /* 将JSON格式种的数据解析到结构体中 */
     for(int i=0; i<ae_info.num; i++) {
         json_temp = cJSON_GetArrayItem(rule, i);
-        ae_info.arr_rule[i].judg = ae_my_strdup(cJSON_GetStringValue(json_temp));
+        ae_arr_rule[i].judg = ae_my_strdup(cJSON_GetStringValue(json_temp));
         json_temp = cJSON_GetArrayItem(rule_out, i);
-        ae_info.arr_rule[i].out_opt = ae_my_strdup(cJSON_GetStringValue(json_temp));
+        ae_arr_rule[i].out_opt = ae_my_strdup(cJSON_GetStringValue(json_temp));
 
         json_temp = cJSON_GetArrayItem(rule_para, i);
         json_temp_para = cJSON_GetObjectItem(json_temp, "switch");
-        if(cJSON_IsTrue(json_temp_para)) ae_info.arr_rule[i].para.para_flag |= (1<<0);
-        else ae_info.arr_rule[i].para.para_flag &= ~(1<<0);
+        if(cJSON_IsTrue(json_temp_para)) ae_arr_rule[i].para.para_flag |= (1<<0);
+        else ae_arr_rule[i].para.para_flag &= ~(1<<0);
+
+        json_temp_para = cJSON_GetObjectItem(json_temp, "tid");
+        ae_arr_rule[i].para.trans_id = cJSON_GetNumberValue(json_temp_para);
 
         json_temp_para = cJSON_GetObjectItem(json_temp, "period");
-        ae_info.arr_rule[i].para.period = cJSON_GetNumberValue(json_temp_para);
+        ae_arr_rule[i].para.period = cJSON_GetNumberValue(json_temp_para);
 
         json_temp_para = cJSON_GetObjectItem(json_temp, "type");
-        ae_info.arr_rule[i].para.type = ae_type_parse(cJSON_GetStringValue(json_temp_para));
+        ae_arr_rule[i].para.type = ae_type_parse(cJSON_GetStringValue(json_temp_para));
 
         /* 最多支持p1 p2 p3 */ 
         memset(tempbuf, 0, sizeof(tempbuf));
@@ -175,7 +179,7 @@ static ae_eu_result_t ae_parse_config(cJSON * json_root) {
             strcat(tempbuf, cJSON_GetStringValue(json_temp_para));
             strcat(tempbuf, ";");
         }
-        ae_info.arr_rule[i].para.para_string = ae_my_strdup(tempbuf);
+        ae_arr_rule[i].para.para_string = ae_my_strdup(tempbuf);
     }
 
     return AE_OK;
