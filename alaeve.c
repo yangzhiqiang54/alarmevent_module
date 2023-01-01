@@ -1,15 +1,15 @@
 /*
-    Ä£¿éÃû³Æ£º±¨¾¯¡¢ÊÂ¼şÂß¼­ÅĞ¶Ï´¦ÀíÄ£¿é
-    ÊäÈë£º×Ö·û´®¡¢ÅĞ¶Ï¹æÔò¡¢Êı¾İÔ´¡¢Êä³ö¶ÔÏó¡¢Êä³öÄÚÈİ
-    Êä³ö£ºÅĞ¶Ï½á¹û¡¢ãĞÖµ¡¢µ±Ç°Öµ
-    ×÷Õß£ºyzq
+    æ¨¡å—åç§°ï¼šæŠ¥è­¦ã€äº‹ä»¶é€»è¾‘åˆ¤æ–­å¤„ç†æ¨¡å—
+    è¾“å…¥ï¼šå­—ç¬¦ä¸²ã€åˆ¤æ–­è§„åˆ™ã€æ•°æ®æºã€è¾“å‡ºå¯¹è±¡ã€è¾“å‡ºå†…å®¹
+    è¾“å‡ºï¼šåˆ¤æ–­ç»“æœã€é˜ˆå€¼ã€å½“å‰å€¼
+    ä½œè€…ï¼šyzq
 
-    ÒªÇó£º
-        ºöÂÔ×Ö´®´®ÖĞËùÓĞµÄ¿Õ¸ñ£»
+    è¦æ±‚ï¼š
+        å¿½ç•¥å­—ä¸²ä¸²ä¸­æ‰€æœ‰çš„ç©ºæ ¼ï¼›
 
 
-    °æ±¾¼ÇÂ¼£º
-        2022-12-17 µÚÒ»°æ±¾
+    ç‰ˆæœ¬è®°å½•ï¼š
+        2022-12-17 ç¬¬ä¸€ç‰ˆæœ¬
 */
 
 #include "alaeve.h"
@@ -19,13 +19,13 @@
 #include "stdlib.h"
 #include "sys/stat.h"
 
-/* ºê¶¨Òå */
+/* å®å®šä¹‰ */
 #define ae_malloc   malloc
 #define ae_free     free
 #define ae_remalloc realloc
 /****end****/
 
-/* Ã¶¾Ù */
+/* æšä¸¾ */
 typedef enum {
     AE_FALSE = 2,
     AE_TRUE = 1,
@@ -48,23 +48,23 @@ typedef struct ae_judge_list_t {
 }ae_judge_list_t;
 
 typedef struct ae_para_t {
-    uint32_t period; //ÅĞ¶Ï¼ä¸ô Ãë
-    ae_eu_type_t type; //ÀàĞÍ Ã¶¾Ù ÅäÖÃÖĞ¹Ì¶¨×Ö·û´®
-    char *para_string; //²ÎÊı×Ö·û´®Ö¸Õë
-    uint8_t para_flag; //±¨¾¯²ÎÊı bit0:¿ª¹Ø
-    uint8_t trans_id; //×ª·¢ID
+    uint32_t period; //åˆ¤æ–­é—´éš” ç§’
+    ae_eu_type_t type; //ç±»å‹ æšä¸¾ é…ç½®ä¸­å›ºå®šå­—ç¬¦ä¸²
+    char *para_string; //å‚æ•°å­—ç¬¦ä¸²æŒ‡é’ˆ
+    uint8_t para_flag; //æŠ¥è­¦å‚æ•° bit0:å¼€å…³
+    uint8_t trans_id; //è½¬å‘ID
 }ae_para_t;
 
 typedef struct ae_rule_t {
-    ae_para_t para; //ÊôĞÔ
-    // char *src_data; //Êı¾İÔ´
-    char *judg; //ÅĞ¶Ï×Ö·û´®
-    ae_judge_list_t *jnode; //Á´±í ÅĞ¶Ï×Ö·û´®½âÎöºóµÄ»Øµ÷Êı¾İ
-    char *out_opt; //Êä³ö
+    ae_para_t para; //å±æ€§
+    // char *src_data; //æ•°æ®æº
+    char *judg; //åˆ¤æ–­å­—ç¬¦ä¸²
+    ae_judge_list_t *jnode; //é“¾è¡¨ åˆ¤æ–­å­—ç¬¦ä¸²è§£æåçš„å›è°ƒæ•°æ®
+    char *out_opt; //è¾“å‡º
 }ae_rule_t;
 
 typedef struct ae_info_t {
-    uint16_t num; //±¨¾¯ÅĞ¶Ï×ÜÊı
+    uint16_t num; //æŠ¥è­¦åˆ¤æ–­æ€»æ•°
 }ae_info_t;
 
 typedef struct ae_type_table_t {
@@ -73,27 +73,27 @@ typedef struct ae_type_table_t {
 }ae_type_table_t;
 /****end****/
 
-/* ±äÁ¿ */
-ae_info_t ae_info; // Ä£¿éÈ«¾ÖĞÅÏ¢¼ÇÂ¼
-ae_rule_t * ae_arr_rule = NULL; //±¨¾¯ÊÂ¼ş½á¹¹ÌåÊı×é
+/* å˜é‡ */
+ae_info_t ae_info; // æ¨¡å—å…¨å±€ä¿¡æ¯è®°å½•
+ae_rule_t * ae_arr_rule = NULL; //æŠ¥è­¦äº‹ä»¶ç»“æ„ä½“æ•°ç»„
 /****end****/
 
-/* ±¨¾¯ÀàĞÍÓë×Ö·û´®Ó³Éä±í */
+/* æŠ¥è­¦ç±»å‹ä¸å­—ç¬¦ä¸²æ˜ å°„è¡¨ */
 #define AE_TYPE_TABLE_NUM 2
 ae_type_table_t ae_type_table[AE_TYPE_TABLE_NUM] = {
     {AE_TYPE_NORMAL,    "normal"},
     {AE_TYPE_PAIR,      "pair"}
 };
 
-/* Á´±í²Ù×÷ */
-/* ´´½¨ĞÂÍ·½Úµã */
+/* é“¾è¡¨æ“ä½œ */
+/* åˆ›å»ºæ–°å¤´èŠ‚ç‚¹ */
 ae_judge_list_t * ae_list_new_head(void) {
     ae_judge_list_t * plist = ae_malloc(sizeof(ae_judge_list_t));
     if(plist) memset(plist, 0, sizeof(ae_judge_list_t));
     return plist;
 }
 
-/* ¼ÓÈëĞÂµÄºóÒ»¸ö½Úµã */
+/* åŠ å…¥æ–°çš„åä¸€ä¸ªèŠ‚ç‚¹ */
 ae_judge_list_t * ae_list_add_tail(ae_judge_list_t * cur_list) {
     ae_judge_list_t * plist = ae_malloc(sizeof(ae_judge_list_t));
     if(plist) memset(plist, 0, sizeof(ae_judge_list_t));
@@ -102,14 +102,14 @@ ae_judge_list_t * ae_list_add_tail(ae_judge_list_t * cur_list) {
     cur_list->next = plist;
     return plist;
 }
-/* end Á´±í²Ù×÷ */
+/* end é“¾è¡¨æ“ä½œ */
 
-/* ×Ö·û´®¿½±´ ÉêÇë¶¯Ì¬ÄÚ´æ */
+/* å­—ç¬¦ä¸²æ‹·è´ ç”³è¯·åŠ¨æ€å†…å­˜ */
 static char *ae_my_strdup(char *input)
 {
     
     int len = strlen(input);
-    char *output = (char *)ae_malloc(len + 1); //¼ÓÈëÒ»¸ö½áÊø·ûµÄ³¤¶È
+    char *output = (char *)ae_malloc(len + 1); //åŠ å…¥ä¸€ä¸ªç»“æŸç¬¦çš„é•¿åº¦
     if (output == NULL)
         return NULL;
     memset(output, 0, len + 1);
@@ -117,22 +117,22 @@ static char *ae_my_strdup(char *input)
     return output;
 }
 
-/* ½«±¨¾¯ÀàĞÍ×Ö·û´®½âÎö³É¶ÔÓ¦µÄÀàĞÍÃ¶¾ÙÖµ */
+/* å°†æŠ¥è­¦ç±»å‹å­—ç¬¦ä¸²è§£ææˆå¯¹åº”çš„ç±»å‹æšä¸¾å€¼ */
 static ae_eu_type_t ae_type_parse(char * str) {
     for(int i=0; i<AE_TYPE_TABLE_NUM; i++) {
         if(strcmp(str, ae_type_table[i].type_val) == 0) {
             return ae_type_table[i].sn;
         }
     }
-    return AE_TYPE_NORMAL; //ÕÒ²»µ½¶ÔÓ¦µÄÀàĞÍ£¬Ôò·µ»ØÆÕÍ¨ÀàĞÍ
+    return AE_TYPE_NORMAL; //æ‰¾ä¸åˆ°å¯¹åº”çš„ç±»å‹ï¼Œåˆ™è¿”å›æ™®é€šç±»å‹
 }
 
-/* ½«ÅĞ¶Ï×Ö·û´®½âÎö³É¶ÔÓ¦µÄÊı¾İÔ´Ö¸ÕëºÍÂß¼­ÅĞ¶Ï»Øµ÷º¯Êı */
+/* å°†åˆ¤æ–­å­—ç¬¦ä¸²è§£ææˆå¯¹åº”çš„æ•°æ®æºæŒ‡é’ˆå’Œé€»è¾‘åˆ¤æ–­å›è°ƒå‡½æ•° */
 void ae_parse_rule_to_list(ae_rule_t * opt, char * st_judge) {
     
 }
 
-/* ½«ÅäÖÃÎÄ¼şÄÚÈİ½âÎöµ½ÄÚ´æµÄae½á¹¹ÌåÖĞ */
+/* å°†é…ç½®æ–‡ä»¶å†…å®¹è§£æåˆ°å†…å­˜çš„aeç»“æ„ä½“ä¸­ */
 static ae_eu_result_t ae_parse_config(cJSON * json_root) {
     ae_eu_result_t res = AE_OK;
     cJSON *rule, *rule_out, *rule_para, *json_temp, *json_temp_para;
@@ -142,7 +142,7 @@ static ae_eu_result_t ae_parse_config(cJSON * json_root) {
     rule_out = cJSON_GetObjectItem(json_root, "rule_out");
     rule_para = cJSON_GetObjectItem(json_root, "rule_para");
 
-    /* ÅĞ¶ÏJSON¸ñÊ½ÊÇ·ñ½âÎö³É¹¦ */
+    /* åˆ¤æ–­JSONæ ¼å¼æ˜¯å¦è§£ææˆåŠŸ */
     if(rule==0 || rule_out==0 || rule_para==0) {
         return AE_JSON_ERROR;
     }
@@ -151,7 +151,7 @@ static ae_eu_result_t ae_parse_config(cJSON * json_root) {
         return AE_JSON_ERROR;
     }
 
-    /* »ñÈ¡±¨¾¯ÊÂ¼şÅäÖÃ×ÜÊıÁ¿ */
+    /* è·å–æŠ¥è­¦äº‹ä»¶é…ç½®æ€»æ•°é‡ */
     ae_info.num = cJSON_GetArraySize(rule);
     if(ae_info.num !=  cJSON_GetArraySize(rule_out)) {
         res = AE_JSON_ERROR;
@@ -162,7 +162,7 @@ static ae_eu_result_t ae_parse_config(cJSON * json_root) {
         goto ERR_EXIT;
     }
     
-    /* ¸ø±¨¾¯ÊÂ¼ş½á¹¹ÌåÉêÇë¶¯Ì¬ÄÚ´æ */
+    /* ç»™æŠ¥è­¦äº‹ä»¶ç»“æ„ä½“ç”³è¯·åŠ¨æ€å†…å­˜ */
     ae_arr_rule = ae_malloc(sizeof(ae_rule_t) * ae_info.num);
     memset(ae_arr_rule, 0, (sizeof(ae_rule_t) * ae_info.num));
     if(ae_arr_rule == NULL) {
@@ -170,7 +170,7 @@ static ae_eu_result_t ae_parse_config(cJSON * json_root) {
         goto ERR_EXIT;
     }
 
-    /* ½«JSON¸ñÊ½ÖÖµÄÊı¾İ½âÎöµ½½á¹¹ÌåÖĞ */
+    /* å°†JSONæ ¼å¼ç§çš„æ•°æ®è§£æåˆ°ç»“æ„ä½“ä¸­ */
     for(int i=0; i<ae_info.num; i++) {
         json_temp = cJSON_GetArrayItem(rule, i);
         ae_parse_rule_to_list(&ae_arr_rule[i], cJSON_GetStringValue(json_temp));
@@ -192,7 +192,7 @@ static ae_eu_result_t ae_parse_config(cJSON * json_root) {
         json_temp_para = cJSON_GetObjectItem(json_temp, "type");
         ae_arr_rule[i].para.type = ae_type_parse(cJSON_GetStringValue(json_temp_para));
 
-        /* ×î¶àÖ§³Öp1 p2 p3 */ 
+        /* æœ€å¤šæ”¯æŒp1 p2 p3 */ 
         memset(tempbuf, 0, sizeof(tempbuf));
         json_temp_para = cJSON_GetObjectItem(json_temp, "p1");
         if(json_temp_para != NULL) {
@@ -221,7 +221,7 @@ static ae_eu_result_t ae_parse_config(cJSON * json_root) {
 
 
 
-/* Ìõ¼şÅĞ¶Ï */
+/* æ¡ä»¶åˆ¤æ–­ */
 static ae_eu_result_t ae_rule_judge(ae_rule_t *prule)
 {
     
@@ -231,7 +231,7 @@ static ae_eu_result_t ae_rule_judge(ae_rule_t *prule)
     return AE_FALSE;
 }
 
-/* ²âÊÔÊı¾İ */
+/* æµ‹è¯•æ•°æ® */
 typedef struct {
     char name[8];
     float val;
@@ -248,13 +248,13 @@ test_data_t test_data[] = {
 /* API */
 /*******/
 
-/* ±¨¾¯Ê±¼äÄ£¿é³õÊ¼»¯ */
+/* æŠ¥è­¦æ—¶é—´æ¨¡å—åˆå§‹åŒ– */
 int ae_init(void)
 {
     memset(&ae_info, 0, sizeof(ae_info_t));
 }
 
-/* Ä£¿éÑ­»·ÔËĞĞÏß³Ì */
+/* æ¨¡å—å¾ªç¯è¿è¡Œçº¿ç¨‹ */
 void ae_loop(void)
 {
     static int num_cnt = 0;
@@ -265,17 +265,17 @@ void ae_loop(void)
         return;
     }
 
-    /* È¡ÏÂÒ»¸öÅĞ¶Ï¶ÔÏó */
+    /* å–ä¸‹ä¸€ä¸ªåˆ¤æ–­å¯¹è±¡ */
     p_rule_loop = &ae_arr_rule[num_cnt];
     num_cnt += 1;
     if(num_cnt >= ae_info.num) num_cnt = 0;
 
-    /* ÅĞ¶ÏÊÇ·ñ¿ªÆô */
+    /* åˆ¤æ–­æ˜¯å¦å¼€å¯ */
     if(p_rule_loop->para.para_flag & 0x01 == 0) {
         return;
     }
 
-    /* ÅĞ¶Ï½á¹ûÕæ¼Ù */
+    /* åˆ¤æ–­ç»“æœçœŸå‡ */
     judg_res = ae_rule_judge(p_rule_loop);
 
 
@@ -291,7 +291,7 @@ void main(char argc, char *agrv[])
     int rw = 0, file_size = 0;
     struct stat stat_temp;
 
-    /* ¶ÁÈ¡ÎÄ¼ş */
+    /* è¯»å–æ–‡ä»¶ */
     stat(".\\RULE.json", &stat_temp);
     file_size = stat_temp.st_size;
 
@@ -305,18 +305,18 @@ void main(char argc, char *agrv[])
     rw = fread(fbuf, 1, file_size, fp);
     fclose(fp);
     
-    /* ½âÎöJSONÊı¾İ */
+    /* è§£æJSONæ•°æ® */
     cJSON * root = cJSON_Parse(fbuf);
     free(fbuf);
     if(root == NULL) {
         goto EXIT;
     }
 
-    /* ½«JSONÊı¾İ½âÎöµ½ae½á¹¹ÌåÖĞ */
+    /* å°†JSONæ•°æ®è§£æåˆ°aeç»“æ„ä½“ä¸­ */
     ae_eu_result_t res = ae_parse_config(root);
     cJSON_Delete(root);
 
-    /* ½âÎö¹æÔò */
+    /* è§£æè§„åˆ™ */
     ae_parse_rule();
 
     while(1) {
