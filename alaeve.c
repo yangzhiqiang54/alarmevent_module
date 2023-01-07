@@ -18,6 +18,7 @@
 #include "string.h"
 #include "stdlib.h"
 #include "sys/stat.h"
+#include "pthread.h"
 
 /* 宏定义 */
 #define ae_malloc   malloc
@@ -41,7 +42,7 @@ typedef enum {
 
 /* typedef */
 typedef struct ae_judge_list_t {
-    ae_judge_list_t * next;
+    struct ae_judge_list_t * next;
     void * val;
     int (* logic_judg_tfun)(void *);
     uint8_t logic_next; //0-NULL; 1-&&; 2-||
@@ -107,7 +108,6 @@ ae_judge_list_t * ae_list_add_tail(ae_judge_list_t * cur_list) {
 /* 字符串拷贝 申请动态内存 */
 static char *ae_my_strdup(char *input)
 {
-    
     int len = strlen(input);
     char *output = (char *)ae_malloc(len + 1); //加入一个结束符的长度
     if (output == NULL)
@@ -129,6 +129,19 @@ static ae_eu_type_t ae_type_parse(char * str) {
 
 /* 将判断字符串解析成对应的数据源指针和逻辑判断回调函数 */
 void ae_parse_rule_to_list(ae_rule_t * opt, char * st_judge) {
+    
+
+
+
+
+
+
+
+
+
+
+
+
     
 }
 
@@ -172,12 +185,15 @@ static ae_eu_result_t ae_parse_config(cJSON * json_root) {
 
     /* 将JSON格式种的数据解析到结构体中 */
     for(int i=0; i<ae_info.num; i++) {
+        //解析判断规则
         json_temp = cJSON_GetArrayItem(rule, i);
         ae_parse_rule_to_list(&ae_arr_rule[i], cJSON_GetStringValue(json_temp));
 
+        //解析输出
         json_temp = cJSON_GetArrayItem(rule_out, i);
         ae_arr_rule[i].out_opt = ae_my_strdup(cJSON_GetStringValue(json_temp));
 
+        //解析参数
         json_temp = cJSON_GetArrayItem(rule_para, i);
         json_temp_para = cJSON_GetObjectItem(json_temp, "switch");
         if(cJSON_IsTrue(json_temp_para)) ae_arr_rule[i].para.para_flag |= (1<<0);
@@ -315,9 +331,6 @@ void main(char argc, char *agrv[])
     /* 将JSON数据解析到ae结构体中 */
     ae_eu_result_t res = ae_parse_config(root);
     cJSON_Delete(root);
-
-    /* 解析规则 */
-    ae_parse_rule();
 
     while(1) {
         ae_loop();
