@@ -24,7 +24,36 @@
 #define ae_malloc   malloc
 #define ae_free     free
 #define ae_remalloc realloc
+
+#define AE_JUDGE_UNIT_MAXNUM    8
 /****end****/
+
+
+/* 测试数据 */
+typedef struct {
+    char name[8];
+    float val;
+}test_data_t;
+test_data_t test_data[3][10] = {
+    {
+        {"Ua", 220},{"Ub", 221},{"Uc", 221},
+        {"Ia", 5},{"Ib", 6},{"Ic", 7},
+        {"Pa", 0.1},{"Pb", 0.2},{"Pc", 0.3},{"P", 0.6}
+    },
+    {
+        {"Ua", 220},{"Ub", 221},{"Uc", 221},
+        {"Ia", 5},{"Ib", 6},{"Ic", 7},
+        {"Pa", 0.1},{"Pb", 0.2},{"Pc", 0.3},{"P", 0.6}
+    },
+    {
+        {"Ua", 220},{"Ub", 221},{"Uc", 221},
+        {"Ia", 5},{"Ib", 6},{"Ic", 7},
+        {"Pa", 0.1},{"Pb", 0.2},{"Pc", 0.3},{"P", 0.6}
+    }
+};
+/****end****/
+
+
 
 /* 枚举 */
 typedef enum {
@@ -32,6 +61,8 @@ typedef enum {
     AE_TRUE = 1,
     AE_OK = 0,
     AE_JSON_ERROR = -1,
+    AE_JUDGE_ERROR = -2,
+    AE_MALLOC_ERROR = -3,
 }ae_eu_result_t;
 
 typedef enum {
@@ -41,12 +72,12 @@ typedef enum {
 /****end****/
 
 /* typedef */
-typedef struct ae_judge_list_t {
-    struct ae_judge_list_t * next;
+typedef struct ae_judge_t {
+    //struct ae_judge_t * next;
     void * val;
     int (* logic_judg_tfun)(void *);
     uint8_t logic_next; //0-NULL; 1-&&; 2-||
-}ae_judge_list_t;
+}ae_judge_t;
 
 typedef struct ae_para_t {
     uint32_t period; //判断间隔 秒
@@ -59,13 +90,14 @@ typedef struct ae_para_t {
 typedef struct ae_rule_t {
     ae_para_t para; //属性
     // char *src_data; //数据源
-    char *judg; //判断字符串
-    ae_judge_list_t *jnode; //链表 判断字符串解析后的回调数据
+    // char *judg; //判断字符串
+    ae_judge_t judge_unit[AE_JUDGE_UNIT_MAXNUM]; //判断字符串解析后的源数据和回调判断函数
     char *out_opt; //输出
 }ae_rule_t;
 
 typedef struct ae_info_t {
-    uint16_t num; //报警判断总数
+    uint16_t rule_num; //报警规则总数
+    uint16_t dev_num; //设备报警总是
 }ae_info_t;
 
 typedef struct ae_type_table_t {
@@ -88,21 +120,29 @@ ae_type_table_t ae_type_table[AE_TYPE_TABLE_NUM] = {
 
 /* 链表操作 */
 /* 创建新头节点 */
-ae_judge_list_t * ae_list_new_head(void) {
-    ae_judge_list_t * plist = ae_malloc(sizeof(ae_judge_list_t));
-    if(plist) memset(plist, 0, sizeof(ae_judge_list_t));
-    return plist;
-}
+// ae_judge_t * ae_list_new_head(void) {
+//     ae_judge_t * plist = ae_malloc(sizeof(ae_judge_t));
+//     if(plist) {
+//         memset(plist, 0, sizeof(ae_judge_t));
+//         return plist;
+//     }
+//     else {
+//         return NULL;
+//     }
+// }
 
-/* 加入新的后一个节点 */
-ae_judge_list_t * ae_list_add_tail(ae_judge_list_t * cur_list) {
-    ae_judge_list_t * plist = ae_malloc(sizeof(ae_judge_list_t));
-    if(plist) memset(plist, 0, sizeof(ae_judge_list_t));
-    else return NULL;
-    
-    cur_list->next = plist;
-    return plist;
-}
+// /* 加入新的后一个节点 */
+// ae_judge_t * ae_list_add_tail(ae_judge_t * cur_list) {
+//     ae_judge_t * plist = ae_malloc(sizeof(ae_judge_t));
+//     if(plist) {
+//         memset(plist, 0, sizeof(ae_judge_t));
+//         cur_list->next = plist;
+//         return plist;
+//     }
+//     else {
+//         return NULL;
+//     }
+// }
 /* end 链表操作 */
 
 /* 字符串拷贝 申请动态内存 */
@@ -127,8 +167,42 @@ static ae_eu_type_t ae_type_parse(char * str) {
     return AE_TYPE_NORMAL; //找不到对应的类型，则返回普通类型
 }
 
-/* 将判断字符串解析成对应的数据源指针和逻辑判断回调函数 */
-void ae_parse_rule_to_list(ae_rule_t * opt, char * st_judge) {
+/* 逻辑判断函数 */
+
+/* end 逻辑判断函数 */
+
+/* 判断字符是否属于参量名称中的字符 */
+static ae_eu_result_t ae_is_vname(char c) {
+    if( (c >= '0' && c <= '9') ||
+        (c >= 'A' && c <= 'Z') ||
+        (c >= 'a' && c <= 'z') ||
+        (c == '_') ) {
+            return AE_TRUE;
+        }
+        else {
+            return AE_FALSE;
+        }
+}
+
+/* 
+    将判断字符串解析成对应的数据源指针和逻辑判断回调函数，放入判断链表中 
+    opt: 报警事件结构体指针
+    st_judge: 规则字符串
+*/
+static ae_eu_result_t ae_parse_rule_to_list(ae_judge_t * junit, char * st_judge) {
+    ae_eu_result_t res = AE_OK;
+    char vname[12] = {0};
+    int jnum = 0, unum = 0, stnum = 0, vnum = 0;
+
+    for(jnum=0; jnum<AE_JUDGE_UNIT_MAXNUM; jnum++) {
+        vnum = 0;
+        while(ae_is_vname(st_judge[stnum]) == AE_TRUE) {
+            vname[vnum++] = st_judge[stnum++];
+
+
+        }
+    }
+
     
 
 
@@ -141,57 +215,78 @@ void ae_parse_rule_to_list(ae_rule_t * opt, char * st_judge) {
 
 
 
-
-    
+    return res;
 }
 
 /* 将配置文件内容解析到内存的ae结构体中 */
 static ae_eu_result_t ae_parse_config(cJSON * json_root) {
     ae_eu_result_t res = AE_OK;
-    cJSON *rule, *rule_out, *rule_para, *json_temp, *json_temp_para;
+    cJSON *rule, *rule_out, *rule_para, *rule_dev, *json_temp, *json_temp_para;
     char tempbuf[64] = {0};
+    int rule_dev_obj_num = 0; 
     
     rule = cJSON_GetObjectItem(json_root, "rule");
     rule_out = cJSON_GetObjectItem(json_root, "rule_out");
+    rule_dev = cJSON_GetObjectItem(json_root, "rule_dev");
     rule_para = cJSON_GetObjectItem(json_root, "rule_para");
+    
 
     /* 判断JSON格式是否解析成功 */
     if(rule==0 || rule_out==0 || rule_para==0) {
         return AE_JSON_ERROR;
     }
 
-    if( !(cJSON_IsArray(rule) && cJSON_IsArray(rule_out) && cJSON_IsArray(rule_para)) ) {
+    if( ! ( cJSON_IsArray(rule) && 
+            cJSON_IsArray(rule_out) && 
+            cJSON_IsArray(rule_dev)) &&
+            cJSON_IsArray(rule_para) ) {
         return AE_JSON_ERROR;
     }
 
-    /* 获取报警事件配置总数量 */
-    ae_info.num = cJSON_GetArraySize(rule);
-    if(ae_info.num !=  cJSON_GetArraySize(rule_out)) {
+    /* 获取报警事件规则总数量 */
+    ae_info.rule_num = cJSON_GetArraySize(rule);
+    if(ae_info.rule_num !=  cJSON_GetArraySize(rule_out)) {
         res = AE_JSON_ERROR;
         goto ERR_EXIT;
     }
-    if(ae_info.num !=  cJSON_GetArraySize(rule_para)) {
+    if(ae_info.rule_num !=  cJSON_GetArraySize(rule_para)) {
         res = AE_JSON_ERROR;
         goto ERR_EXIT;
+    }
+
+    /* 获取判断设备总数量 */
+    ae_info.dev_num = 0;
+    rule_dev_obj_num = cJSON_GetArraySize(rule_dev);
+    for(int i=0; i<rule_dev_obj_num; i++) {
+        json_temp = cJSON_GetArrayItem(rule_dev, i);
+        if(!cJSON_IsArray(json_temp)) {
+            res = AE_JSON_ERROR;
+            goto ERR_EXIT;
+        }
+        ae_info.dev_num += cJSON_GetArraySize(json_temp);
     }
     
     /* 给报警事件结构体申请动态内存 */
-    ae_arr_rule = ae_malloc(sizeof(ae_rule_t) * ae_info.num);
-    memset(ae_arr_rule, 0, (sizeof(ae_rule_t) * ae_info.num));
+    ae_arr_rule = ae_malloc(sizeof(ae_rule_t) * ae_info.rule_num);
+    memset(ae_arr_rule, 0, (sizeof(ae_rule_t) * ae_info.rule_num));
     if(ae_arr_rule == NULL) {
         res = AE_JSON_ERROR;
         goto ERR_EXIT;
     }
 
     /* 将JSON格式种的数据解析到结构体中 */
-    for(int i=0; i<ae_info.num; i++) {
+    for(int i=0; i<ae_info.rule_num; i++) {
         //解析判断规则
         json_temp = cJSON_GetArrayItem(rule, i);
-        ae_parse_rule_to_list(&ae_arr_rule[i], cJSON_GetStringValue(json_temp));
+        ae_parse_rule_to_list(ae_arr_rule[i].judge_unit, cJSON_GetStringValue(json_temp));
 
         //解析输出
         json_temp = cJSON_GetArrayItem(rule_out, i);
         ae_arr_rule[i].out_opt = ae_my_strdup(cJSON_GetStringValue(json_temp));
+
+        //解析设备ID
+        
+
 
         //解析参数
         json_temp = cJSON_GetArrayItem(rule_para, i);
@@ -231,14 +326,14 @@ static ae_eu_result_t ae_parse_config(cJSON * json_root) {
     return AE_OK;
 
     ERR_EXIT:
-    ae_info.num = 0;
+    ae_info.rule_num = 0;
     return res;
 }
 
 
 
 /* 条件判断 */
-static ae_eu_result_t ae_rule_judge(ae_rule_t *prule)
+static ae_eu_result_t ae_get_rule_res(ae_rule_t *prule)
 {
     
 
@@ -246,18 +341,6 @@ static ae_eu_result_t ae_rule_judge(ae_rule_t *prule)
 
     return AE_FALSE;
 }
-
-/* 测试数据 */
-typedef struct {
-    char name[8];
-    float val;
-}test_data_t;
-test_data_t test_data[] = {
-    {"Ua", 220},{"Ub", 221},{"Uc", 221},
-    {"Ia", 5},{"Ib", 6},{"Ic", 7},
-    {"Pa", 0.1},{"Pb", 0.2},{"Pc", 0.3},{"P", 0.6}
-};
-/****end****/
 
 
 /*******/
@@ -277,14 +360,14 @@ void ae_loop(void)
     ae_rule_t * p_rule_loop = NULL;
     ae_eu_result_t judg_res = AE_FALSE;
 
-    if(ae_info.num ==0 || ae_arr_rule == NULL) {
+    if(ae_info.rule_num ==0 || ae_arr_rule == NULL) {
         return;
     }
 
     /* 取下一个判断对象 */
     p_rule_loop = &ae_arr_rule[num_cnt];
     num_cnt += 1;
-    if(num_cnt >= ae_info.num) num_cnt = 0;
+    if(num_cnt >= ae_info.rule_num) num_cnt = 0;
 
     /* 判断是否开启 */
     if(p_rule_loop->para.para_flag & 0x01 == 0) {
@@ -292,7 +375,7 @@ void ae_loop(void)
     }
 
     /* 判断结果真假 */
-    judg_res = ae_rule_judge(p_rule_loop);
+    judg_res = ae_get_rule_res(p_rule_loop);
 
 
 

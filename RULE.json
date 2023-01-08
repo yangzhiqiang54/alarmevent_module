@@ -7,12 +7,16 @@
         "projectName": "yzq_prj2"
     },
     "rule": [
-        "Ua>300",
+        "Ua > 300",
         "P>1 && Ia>0.5"
     ],
     "rule_out": [
         "method=alarm",
         "method=notice"
+    ],
+    "rule_dev": [
+        [1,2],
+        [3]
     ],
     "rule_para": [
         {
@@ -31,9 +35,5 @@
             "type": "pair",
             "p1": "s1e0"
         }
-    ],
-    "rule_dev": [
-        [1,2],
-        [3,4]
     ]
 }
