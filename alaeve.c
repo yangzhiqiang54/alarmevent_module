@@ -34,7 +34,7 @@ typedef struct {
     char name[8];
     float val;
 }test_data_t;
-test_data_t test_data[3][10] = {
+test_data_t test_devdata[3][10] = {
     {
         {"Ua", 220},{"Ub", 221},{"Uc", 221},
         {"Ia", 5},{"Ib", 6},{"Ic", 7},
@@ -74,9 +74,9 @@ typedef enum {
 /* typedef */
 typedef struct ae_judge_t {
     //struct ae_judge_t * next;
-    void * val;
-    int (* logic_judg_tfun)(void *);
-    uint8_t logic_next; //0-NULL; 1-&&; 2-||
+    float cdtval; //条件值
+    int  (* logic_judge_tfun)(void *); //进行各种逻辑判断的函数指针
+    uint8_t logic_next; //0-NULL  1-&&  2-||  3-;
 }ae_judge_t;
 
 typedef struct ae_para_t {
@@ -89,15 +89,17 @@ typedef struct ae_para_t {
 
 typedef struct ae_rule_t {
     ae_para_t para; //属性
-    // char *src_data; //数据源
-    // char *judg; //判断字符串
     ae_judge_t judge_unit[AE_JUDGE_UNIT_MAXNUM]; //判断字符串解析后的源数据和回调判断函数
+    float **src_data; //指向指针数组的指针
     char *out_opt; //输出
+    uint16_t val_num;
+    uint8_t dev_start;
+    uint8_t dev_num;
 }ae_rule_t;
 
 typedef struct ae_info_t {
     uint16_t rule_num; //报警规则总数
-    uint16_t dev_num; //设备报警总是
+    uint16_t dev_num; //报警设备总数
 }ae_info_t;
 
 typedef struct ae_type_table_t {
@@ -109,7 +111,20 @@ typedef struct ae_type_table_t {
 /* 变量 */
 ae_info_t ae_info; // 模块全局信息记录
 ae_rule_t * ae_arr_rule = NULL; //报警事件结构体数组
+uint8_t * ae_dev_list = NULL; //设备列表，用来记录报警规则对应了哪些设备
 /****end****/
+
+/* 判断符号列表 */
+#define AE_JUDGE_ENUMNUM    6
+const char ae_judge_char_enum[AE_JUDGE_ENUMNUM][4] ={
+    ">", ">=", "<", "<=", "==", "!="
+};
+/* 逻辑符号列表 */
+#define AE_LOGIC_ENUMNUM    3
+const char ae_logic_char_enum[AE_LOGIC_ENUMNUM][4] = {
+    "&&", "||", ";"
+};
+
 
 /* 报警类型与字符串映射表 */
 #define AE_TYPE_TABLE_NUM 2
@@ -119,7 +134,7 @@ ae_type_table_t ae_type_table[AE_TYPE_TABLE_NUM] = {
 };
 
 /* 链表操作 */
-/* 创建新头节点 */
+/* 新建头节点 */
 // ae_judge_t * ae_list_new_head(void) {
 //     ae_judge_t * plist = ae_malloc(sizeof(ae_judge_t));
 //     if(plist) {
@@ -131,7 +146,7 @@ ae_type_table_t ae_type_table[AE_TYPE_TABLE_NUM] = {
 //     }
 // }
 
-// /* 加入新的后一个节点 */
+// /* 新建一个next节点 */
 // ae_judge_t * ae_list_add_tail(ae_judge_t * cur_list) {
 //     ae_judge_t * plist = ae_malloc(sizeof(ae_judge_t));
 //     if(plist) {
@@ -184,24 +199,71 @@ static ae_eu_result_t ae_is_vname(char c) {
         }
 }
 
+/* 计算判断符号在字符串中出现的次数 */
+static uint8_t ae_get_judeg_strnum(char *buf, char *tarbuf) {
+    int tarcnt = 0;
+    char *p = strstr(buf, tarbuf);
+    while(p != NULL) {
+        tarcnt++;
+        p += strlen(tarbuf);
+        p = strstr(p, tarbuf);
+    }
+    return tarcnt;
+}
+
 /* 
     将判断字符串解析成对应的数据源指针和逻辑判断回调函数，放入判断链表中 
     opt: 报警事件结构体指针
     st_judge: 规则字符串
 */
-static ae_eu_result_t ae_parse_rule_to_list(ae_judge_t * junit, char * st_judge) {
+static ae_eu_result_t ae_parse_rule_to_list(ae_rule_t * junit, char * st_judge) {
     ae_eu_result_t res = AE_OK;
     char vname[12] = {0};
-    int jnum = 0, unum = 0, stnum = 0, vnum = 0;
+    char new_judge[64] = {0};
+    int i = 0, j = 0;
+    int val_cnt = 0;
+    uint8_t vname_flag = 0;
 
-    for(jnum=0; jnum<AE_JUDGE_UNIT_MAXNUM; jnum++) {
-        vnum = 0;
-        while(ae_is_vname(st_judge[stnum]) == AE_TRUE) {
-            vname[vnum++] = st_judge[stnum++];
-
-
+    /* 去掉字符串中的空格 */
+    for(i=0,j=0; st_judge[i] != '\0'; i++) {
+        if(st_judge[i] != ' ') {
+            new_judge[j++] = st_judge[i];
+        }
+        if(j >= 64) {
+            res = AE_JUDGE_ERROR;
+            goto EXIT;
         }
     }
+    new_judge[j] = '\0';
+
+    /* 计算出此报警结构体涉及到参数总个数 */
+    junit->val_num = 0;
+    for(i=0; i<AE_JUDGE_ENUMNUM; i++) {
+        junit->val_num += ae_get_judeg_strnum(new_judge, (char *)ae_judge_char_enum[i]);
+    }
+
+    /* 为源数据指针数组申请内存 */
+    val_cnt = junit->val_num * junit->dev_num;
+    junit->src_data = ae_malloc(val_cnt * 4);
+    if(junit->src_data == NULL) {
+        res = AE_MALLOC_ERROR;
+        goto EXIT;
+    }
+    memset(junit->src_data, 0, val_cnt * 4);
+
+    /* 初始化源数据指针数组 */
+    for(i=0; i<junit->dev_num; i++) {
+        for(j=0; j<junit->val_num; j++) {
+            
+        }
+    }
+
+
+    /* 解析出数据源、判断逻辑、阈值 */
+    
+
+    /* 获得参数名称vname 和 设备序号 */
+    
 
     
 
@@ -214,7 +276,7 @@ static ae_eu_result_t ae_parse_rule_to_list(ae_judge_t * junit, char * st_judge)
 
 
 
-
+    EXIT:
     return res;
 }
 
@@ -268,25 +330,41 @@ static ae_eu_result_t ae_parse_config(cJSON * json_root) {
     
     /* 给报警事件结构体申请动态内存 */
     ae_arr_rule = ae_malloc(sizeof(ae_rule_t) * ae_info.rule_num);
-    memset(ae_arr_rule, 0, (sizeof(ae_rule_t) * ae_info.rule_num));
     if(ae_arr_rule == NULL) {
-        res = AE_JSON_ERROR;
+        res = AE_MALLOC_ERROR;
         goto ERR_EXIT;
     }
+    memset(ae_arr_rule, 0, (sizeof(ae_rule_t) * ae_info.rule_num));
 
+    /* 给设备列表申请内存,并赋值和分配到对应报警规则结构体中 */
+    ae_dev_list = ae_malloc(ae_info.dev_num);
+    if(ae_dev_list == NULL) {
+        res = AE_MALLOC_ERROR;
+        goto ERR_EXIT;
+    }
+    memset(ae_dev_list, 0, ae_info.dev_num);
+    int dev_list_cnt = 0;
+    cJSON * dev_list_num = NULL;
+    for(int i=0; i<rule_dev_obj_num; i++) {
+        json_temp = cJSON_GetArrayItem(rule_dev, i);
+        int rule_dev_arr_per = cJSON_GetArraySize(json_temp);
+        ae_arr_rule[i].dev_start = dev_list_cnt; //此报警对应的设备列表里的起始地址
+        ae_arr_rule[i].dev_num = rule_dev_arr_per; //此报警对应的设备数量
+        for(int j = 0; j<rule_dev_arr_per; j++) {
+            dev_list_num = cJSON_GetArrayItem(json_temp, j);
+            ae_dev_list[dev_list_cnt++] = cJSON_GetNumberValue(dev_list_num);
+        }
+    }
+    
     /* 将JSON格式种的数据解析到结构体中 */
     for(int i=0; i<ae_info.rule_num; i++) {
         //解析判断规则
         json_temp = cJSON_GetArrayItem(rule, i);
-        ae_parse_rule_to_list(ae_arr_rule[i].judge_unit, cJSON_GetStringValue(json_temp));
+        ae_parse_rule_to_list(&ae_arr_rule[i], cJSON_GetStringValue(json_temp));
 
         //解析输出
         json_temp = cJSON_GetArrayItem(rule_out, i);
         ae_arr_rule[i].out_opt = ae_my_strdup(cJSON_GetStringValue(json_temp));
-
-        //解析设备ID
-        
-
 
         //解析参数
         json_temp = cJSON_GetArrayItem(rule_para, i);
