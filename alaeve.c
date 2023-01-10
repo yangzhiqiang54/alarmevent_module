@@ -199,6 +199,21 @@ static ae_eu_result_t ae_is_vname(char c) {
         }
 }
 
+/* 
+    定位到源数据指针地址 
+    @此函数需要根据外部实时数据结构修改
+    dnum: 设备序号
+    vstr: 参数名称字符串指针
+    return: 源数据指针地址
+*/
+static float * ae_get_val_p(uint8_t dnum, char * vstr) {
+
+
+
+
+
+}
+
 /* 计算判断符号在字符串中出现的次数 */
 static uint8_t ae_get_judeg_strnum(char *buf, char *tarbuf) {
     int tarcnt = 0;
@@ -213,12 +228,11 @@ static uint8_t ae_get_judeg_strnum(char *buf, char *tarbuf) {
 
 /* 
     将判断字符串解析成对应的数据源指针和逻辑判断回调函数，放入判断链表中 
-    opt: 报警事件结构体指针
+    junit: 报警事件结构体指针
     st_judge: 规则字符串
 */
 static ae_eu_result_t ae_parse_rule_to_list(ae_rule_t * junit, char * st_judge) {
     ae_eu_result_t res = AE_OK;
-    char vname[12] = {0};
     char new_judge[64] = {0};
     int i = 0, j = 0;
     int val_cnt = 0;
@@ -252,9 +266,18 @@ static ae_eu_result_t ae_parse_rule_to_list(ae_rule_t * junit, char * st_judge) 
     memset(junit->src_data, 0, val_cnt * 4);
 
     /* 初始化源数据指针数组 */
+    char vname[12] = {0};
+    uint8_t dev_pla = 0;
     for(i=0; i<junit->dev_num; i++) {
         for(j=0; j<junit->val_num; j++) {
-            
+            //获取设备序列号
+            dev_pla = ae_dev_list[junit->dev_start + i]; 
+
+            //获取参数名称
+
+
+            //获取源数据指针地址
+            junit->src_data[i * junit->val_num + j] = ae_get_val_p(dev_pla, vname);
         }
     }
 
