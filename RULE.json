@@ -7,8 +7,8 @@
         "projectName": "yzq_prj2"
     },
     "rule": [
-        "Ua > 300",
-        "P>1 && Ia>0.5"
+        "P>1&&Ia>0.5",
+        "Ua>300"
     ],
     "rule_out": [
         "method=alarm",

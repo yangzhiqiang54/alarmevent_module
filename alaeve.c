@@ -25,7 +25,7 @@
 #define ae_free     free
 #define ae_remalloc realloc
 
-#define AE_JUDGE_UNIT_MAXNUM    8
+#define AE_JUDGE_UNIT_MAXNUM    6
 /****end****/
 
 
@@ -36,17 +36,17 @@ typedef struct {
 }test_data_t;
 test_data_t test_devdata[3][10] = {
     {
-        {"Ua", 220},{"Ub", 221},{"Uc", 221},
+        {"Ua", 220.11},{"Ub", 221},{"Uc", 221},
         {"Ia", 5},{"Ib", 6},{"Ic", 7},
         {"Pa", 0.1},{"Pb", 0.2},{"Pc", 0.3},{"P", 0.6}
     },
     {
-        {"Ua", 220},{"Ub", 221},{"Uc", 221},
+        {"Ua", 220.21},{"Ub", 221},{"Uc", 221},
         {"Ia", 5},{"Ib", 6},{"Ic", 7},
         {"Pa", 0.1},{"Pb", 0.2},{"Pc", 0.3},{"P", 0.6}
     },
     {
-        {"Ua", 220},{"Ub", 221},{"Uc", 221},
+        {"Ua", 220.31},{"Ub", 221},{"Uc", 221},
         {"Ia", 5},{"Ib", 6},{"Ic", 7},
         {"Pa", 0.1},{"Pb", 0.2},{"Pc", 0.3},{"P", 0.6}
     }
@@ -67,15 +67,17 @@ typedef enum {
 
 typedef enum {
     AE_TYPE_NORMAL = 0,
-    AE_TYPE_PAIR = 1,
+    AE_TYPE_CHANGE,
+    AE_TYPE_PAIR,
 }ae_eu_type_t;
 /****end****/
 
 /* typedef */
+typedef ae_eu_result_t(* judge_pfun_t)(void *, void *);
 typedef struct ae_judge_t {
     //struct ae_judge_t * next;
     float cdtval; //条件值
-    int  (* logic_judge_tfun)(void *); //进行各种逻辑判断的函数指针
+    judge_pfun_t judge_pfun; //进行各种逻辑判断的函数指针
     uint8_t logic_next; //0-NULL  1-&&  2-||  3-;
 }ae_judge_t;
 
@@ -92,7 +94,7 @@ typedef struct ae_rule_t {
     ae_judge_t judge_unit[AE_JUDGE_UNIT_MAXNUM]; //判断字符串解析后的源数据和回调判断函数
     float **src_data; //指向指针数组的指针
     char *out_opt; //输出
-    uint16_t val_num;
+    uint16_t obj_num;
     uint8_t dev_start;
     uint8_t dev_num;
 }ae_rule_t;
@@ -106,19 +108,35 @@ typedef struct ae_type_table_t {
     ae_eu_type_t sn;
     char *type_val;
 }ae_type_table_t;
+
+typedef struct ae_judge_table_t {
+    char jname[4];
+    judge_pfun_t jfun;
+}ae_judge_table_t;
 /****end****/
 
 /* 变量 */
 ae_info_t ae_info; // 模块全局信息记录
 ae_rule_t * ae_arr_rule = NULL; //报警事件结构体数组
 uint8_t * ae_dev_list = NULL; //设备列表，用来记录报警规则对应了哪些设备
-/****end****/
+/* end 变量 */
+
+/* 函数声明 */
+ae_eu_result_t ae_judge_large(void *v1, void *v2);
+ae_eu_result_t ae_jkudge_large_equal(void *v1, void *v2);
+/* end 函数声明 */
 
 /* 判断符号列表 */
 #define AE_JUDGE_ENUMNUM    6
-const char ae_judge_char_enum[AE_JUDGE_ENUMNUM][4] ={
-    ">", ">=", "<", "<=", "==", "!="
+const ae_judge_table_t ae_judge_char_enum[AE_JUDGE_ENUMNUM] = {
+    {">", ae_judge_large}, 
+    {">=", ae_jkudge_large_equal}, 
+    {"<", NULL}, 
+    {"<=", NULL}, 
+    {"==", NULL}, 
+    {"!=", NULL}
 };
+
 /* 逻辑符号列表 */
 #define AE_LOGIC_ENUMNUM    3
 const char ae_logic_char_enum[AE_LOGIC_ENUMNUM][4] = {
@@ -127,9 +145,10 @@ const char ae_logic_char_enum[AE_LOGIC_ENUMNUM][4] = {
 
 
 /* 报警类型与字符串映射表 */
-#define AE_TYPE_TABLE_NUM 2
+#define AE_TYPE_TABLE_NUM 3
 ae_type_table_t ae_type_table[AE_TYPE_TABLE_NUM] = {
     {AE_TYPE_NORMAL,    "normal"},
+    {AE_TYPE_CHANGE,    "change"},
     {AE_TYPE_PAIR,      "pair"}
 };
 
@@ -160,6 +179,18 @@ ae_type_table_t ae_type_table[AE_TYPE_TABLE_NUM] = {
 // }
 /* end 链表操作 */
 
+/* 计算子字符串在主字符串中出现的次数 */
+static uint8_t ae_get_strnum(char *buf, char *tarbuf) {
+    int tarcnt = 0;
+    char *p = strstr(buf, tarbuf);
+    while(p != NULL) {
+        tarcnt++;
+        p += strlen(tarbuf);
+        p = strstr(p, tarbuf);
+    }
+    return tarcnt;
+}
+
 /* 字符串拷贝 申请动态内存 */
 static char *ae_my_strdup(char *input)
 {
@@ -182,10 +213,6 @@ static ae_eu_type_t ae_type_parse(char * str) {
     return AE_TYPE_NORMAL; //找不到对应的类型，则返回普通类型
 }
 
-/* 逻辑判断函数 */
-
-/* end 逻辑判断函数 */
-
 /* 判断字符是否属于参量名称中的字符 */
 static ae_eu_result_t ae_is_vname(char c) {
     if( (c >= '0' && c <= '9') ||
@@ -198,32 +225,120 @@ static ae_eu_result_t ae_is_vname(char c) {
             return AE_FALSE;
         }
 }
+/*
+    取出规则字符串中的参数名称
+    src：源字符串指针
+    num：参数个数
+    out：返回字符串指针
+*/
+static void ae_get_vname(char * src, uint8_t * pla, char * out) {
+    int i = 0, j = 0, flag = 0;
+    char tbuf[20] = {0};
+    uint8_t len = strlen(src) - (*pla);
+
+    for(i=(*pla); i<len; i++) {
+        if(ae_is_vname(src[i]) == AE_TRUE) {
+            if(!(src[i]>='0' && src[i]<='9')) {
+                flag = 1;
+                tbuf[j++] = src[i];
+            }
+            else if(flag == 1) {
+                tbuf[j++] = src[i];
+            }
+        }
+        else {
+            if(flag == 1) {
+                break;
+            }
+        }
+    }
+    strcpy(out, tbuf);
+    *pla = i;
+}
+
+/* 获取判断字符串 */
+static void ae_get_jname(char * srcstr, uint8_t * pla, char * tarstr) {
+    uint8_t i = *pla, j = 0;
+    while( srcstr[i] == '>' ||
+           srcstr[i] == '<' ||
+           srcstr[i] == '=' ||
+           srcstr[i] == '!' ) {
+                tarstr[j++] = srcstr[i++];
+                (*pla)++;
+           }
+}
 
 /* 
     定位到源数据指针地址 
     @此函数需要根据外部实时数据结构修改
-    dnum: 设备序号
+    dnum: 设备序号，从1开始
     vstr: 参数名称字符串指针
     return: 源数据指针地址
 */
 static float * ae_get_val_p(uint8_t dnum, char * vstr) {
-
-
-
-
-
+    for(int i=0; i<10; i++) {
+        if(strcmp(test_devdata[dnum - 1][i].name, vstr) == 0) {
+            return &test_devdata[dnum - 1][i].val;
+        }
+    }   
 }
 
-/* 计算判断符号在字符串中出现的次数 */
-static uint8_t ae_get_judeg_strnum(char *buf, char *tarbuf) {
-    int tarcnt = 0;
-    char *p = strstr(buf, tarbuf);
-    while(p != NULL) {
-        tarcnt++;
-        p += strlen(tarbuf);
-        p = strstr(p, tarbuf);
+
+/* 逻辑判断函数 */
+/* > 大于 */
+ae_eu_result_t ae_judge_large(void *v1, void *v2) {
+    int val1 = (int)((*(float *)v1)*1000);
+    int val2 = (int)((*(float *)v2)*1000);
+    if(val1 > val2) return AE_TRUE;
+    else return AE_FALSE;
+}
+
+/* >= 大于等于 */
+ae_eu_result_t ae_jkudge_large_equal(void *v1, void *v2) {
+    int val1 = (int)((*(float *)v1)*1000);
+    int val2 = (int)((*(float *)v2)*1000);
+    if(val1 >= val2) return AE_TRUE;
+    else return AE_FALSE;
+}
+
+/* end 逻辑判断函数 */
+
+/* 通过判断字符串返回对应的判断函数指针 */
+static judge_pfun_t ae_get_judge_pfun(char * name) {
+    for(int i=0; i<AE_JUDGE_ENUMNUM; i++) {
+        if(strcmp(name, ae_judge_char_enum[i].jname) == 0) {
+            return ae_judge_char_enum[i].jfun;
+        }
     }
-    return tarcnt;
+    return NULL;
+}
+
+/* 通过判断字符串返回与下一级的逻辑关系 */
+static int ae_get_logic_next(char * str, uint8_t * pla) {
+    uint8_t i = *pla, j = 0;
+    char tbuf[4] = {0};
+
+    while( str[i] != '&' && 
+           str[i] != '|' && 
+           str[i] != ';' && 
+           str[i] != '\0')
+        {
+            i++;
+        }
+    while( !(str[i] != '&' && 
+             str[i] != '|' && 
+             str[i] != ';' && 
+             str[i] != '\0')) 
+        {
+            tbuf[j++] = str[i++];
+        }
+    (*pla) += j;
+
+    if(tbuf[0] == '\0') return 0;
+    else if(strcmp(tbuf, "&&") == 0) return 1;
+    else if(strcmp(tbuf, "||") == 0) return 2;
+    else if(strcmp(tbuf, ";") == 0) return 3;
+    else return 0;
 }
 
 /* 
@@ -238,6 +353,12 @@ static ae_eu_result_t ae_parse_rule_to_list(ae_rule_t * junit, char * st_judge) 
     int val_cnt = 0;
     uint8_t vname_flag = 0;
 
+    /* 判断是否有判断规则 */
+    if(strlen(st_judge) == 0) {
+        res = AE_JUDGE_ERROR;
+        goto EXIT;
+    }
+
     /* 去掉字符串中的空格 */
     for(i=0,j=0; st_judge[i] != '\0'; i++) {
         if(st_judge[i] != ' ') {
@@ -250,14 +371,14 @@ static ae_eu_result_t ae_parse_rule_to_list(ae_rule_t * junit, char * st_judge) 
     }
     new_judge[j] = '\0';
 
-    /* 计算出此报警结构体涉及到参数总个数 */
-    junit->val_num = 0;
+    /* 通过逻辑符号计算出此报警规则判断总个数 */
+    junit->obj_num = 1; //单个条件时，没有逻辑符号
     for(i=0; i<AE_JUDGE_ENUMNUM; i++) {
-        junit->val_num += ae_get_judeg_strnum(new_judge, (char *)ae_judge_char_enum[i]);
+        junit->obj_num += ae_get_strnum(new_judge, (char *)ae_logic_char_enum[i]);
     }
 
     /* 为源数据指针数组申请内存 */
-    val_cnt = junit->val_num * junit->dev_num;
+    val_cnt = junit->obj_num * junit->dev_num;
     junit->src_data = ae_malloc(val_cnt * 4);
     if(junit->src_data == NULL) {
         res = AE_MALLOC_ERROR;
@@ -265,39 +386,33 @@ static ae_eu_result_t ae_parse_rule_to_list(ae_rule_t * junit, char * st_judge) 
     }
     memset(junit->src_data, 0, val_cnt * 4);
 
-    /* 初始化源数据指针数组 */
-    char vname[12] = {0};
-    uint8_t dev_pla = 0;
+    /* 解析出数据源、判断逻辑、阈值 */
+    char vname[20] = {0}, jdg[4] = {0};
+    uint8_t dev_pla = 0, strpla = 0;
     for(i=0; i<junit->dev_num; i++) {
-        for(j=0; j<junit->val_num; j++) {
+        strpla = 0;
+        for(j=0; j<junit->obj_num; j++) {
             //获取设备序列号
             dev_pla = ae_dev_list[junit->dev_start + i]; 
 
             //获取参数名称
-
+            ae_get_vname(new_judge, &strpla, vname);
 
             //获取源数据指针地址
-            junit->src_data[i * junit->val_num + j] = ae_get_val_p(dev_pla, vname);
+            junit->src_data[i * junit->obj_num + j] = ae_get_val_p(dev_pla, vname);
+
+            //获取对应判断规则的函数指针
+            memset(jdg, 0, sizeof(jdg));
+            ae_get_jname(new_judge, &strpla, jdg);
+            junit->judge_unit[j].judge_pfun = ae_get_judge_pfun(jdg);
+
+            //获取阈值
+            junit->judge_unit[j].cdtval = atof(new_judge + strpla);
+
+            //获取下一个判断的关联逻辑
+            junit->judge_unit[j].logic_next = ae_get_logic_next(new_judge, &strpla);
         }
     }
-
-
-    /* 解析出数据源、判断逻辑、阈值 */
-    
-
-    /* 获得参数名称vname 和 设备序号 */
-    
-
-    
-
-
-
-
-
-
-
-
-
 
     EXIT:
     return res;
@@ -481,8 +596,8 @@ void ae_loop(void)
 
 
 }
-
 /****end****/
+
 
 void main(char argc, char *agrv[])
 {
