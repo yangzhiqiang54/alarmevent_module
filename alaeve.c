@@ -136,7 +136,7 @@ ae_dev_list_t * ae_dev_list = NULL; //参与报警判断的设备列表
 
 /* 函数声明 */
 ae_eu_result_t ae_judge_large(void *v1, void *v2);
-ae_eu_result_t ae_jkudge_large_equal(void *v1, void *v2);
+ae_eu_result_t ae_judge_large_equal(void *v1, void *v2);
 ae_eu_result_t ae_judge_less(void *v1, void *v2);
 ae_eu_result_t ae_judge_less_equal(void *v1, void *v2);
 ae_eu_result_t ae_judge_equal(void *v1, void *v2);
@@ -147,7 +147,7 @@ ae_eu_result_t ae_judge_noequal(void *v1, void *v2);
 #define AE_JUDGE_ENUMNUM    6
 const ae_judge_table_t ae_judge_char_enum[AE_JUDGE_ENUMNUM] = {
     {">", ae_judge_large}, 
-    {">=", ae_jkudge_large_equal}, 
+    {">=", ae_judge_large_equal}, 
     {"<", ae_judge_less}, 
     {"<=", ae_judge_less_equal}, 
     {"==", ae_judge_equal}, 
@@ -312,7 +312,7 @@ ae_eu_result_t ae_judge_large(void *v1, void *v2) {
 }
 
 /* >= 大于等于 */
-ae_eu_result_t ae_jkudge_large_equal(void *v1, void *v2) {
+ae_eu_result_t ae_judge_large_equal(void *v1, void *v2) {
     int val1 = (int)((*(float *)v1)*1000);
     int val2 = (int)((*(float *)v2)*1000);
     if(val1 >= val2) return AE_TRUE;
