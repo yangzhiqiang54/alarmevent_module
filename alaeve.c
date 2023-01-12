@@ -25,7 +25,7 @@
 #define ae_free     free
 #define ae_remalloc realloc
 
-#define AE_JUDGE_UNIT_MAXNUM    6
+#define AE_JUDGE_UNIT_MAXNUM    4
 /****end****/
 
 
@@ -66,6 +66,13 @@ typedef enum {
 }ae_eu_result_t;
 
 typedef enum {
+    AE_NOLOGIC = 0,
+    AE_AND,
+    AE_OR,
+    AE_DIST,
+}ae_eu_logic_t;
+
+typedef enum {
     AE_TYPE_NORMAL = 0,
     AE_TYPE_CHANGE,
     AE_TYPE_PAIR,
@@ -75,10 +82,10 @@ typedef enum {
 /* typedef */
 typedef ae_eu_result_t(* judge_pfun_t)(void *, void *);
 typedef struct ae_judge_t {
-    //struct ae_judge_t * next;
     float cdtval; //条件值
     judge_pfun_t judge_pfun; //进行各种逻辑判断的函数指针
-    uint8_t logic_next; //0-NULL  1-&&  2-||  3-;
+    ae_eu_logic_t logic_next; //0-NULL  1-&&  2-||  3-;
+    char srcname[20]; //规则中字符串名称
 }ae_judge_t;
 
 typedef struct ae_para_t {
@@ -92,12 +99,15 @@ typedef struct ae_para_t {
 typedef struct ae_rule_t {
     ae_para_t para; //属性
     ae_judge_t judge_unit[AE_JUDGE_UNIT_MAXNUM]; //判断字符串解析后的源数据和回调判断函数
-    float **src_data; //指向指针数组的指针
     char *out_opt; //输出
     uint16_t obj_num;
-    uint8_t dev_start;
-    uint8_t dev_num;
 }ae_rule_t;
+
+typedef struct ae_dev_list_t {
+    ae_rule_t * rule;
+    uint8_t dev_id;
+    uint8_t flag;
+}ae_dev_list_t;
 
 typedef struct ae_info_t {
     uint16_t rule_num; //报警规则总数
@@ -118,12 +128,15 @@ typedef struct ae_judge_table_t {
 /* 变量 */
 ae_info_t ae_info; // 模块全局信息记录
 ae_rule_t * ae_arr_rule = NULL; //报警事件结构体数组
-uint8_t * ae_dev_list = NULL; //设备列表，用来记录报警规则对应了哪些设备
+ae_dev_list_t * ae_dev_list = NULL; //参与报警判断的设备列表
+//uint8_t * ae_dev_list = NULL; //设备列表，用来记录报警规则对应了哪些设备
 /* end 变量 */
 
 /* 函数声明 */
 ae_eu_result_t ae_judge_large(void *v1, void *v2);
 ae_eu_result_t ae_jkudge_large_equal(void *v1, void *v2);
+ae_eu_result_t ae_judge_less(void *v1, void *v2);
+ae_eu_result_t ae_judge_less_equal(void *v1, void *v2);
 /* end 函数声明 */
 
 /* 判断符号列表 */
@@ -131,8 +144,8 @@ ae_eu_result_t ae_jkudge_large_equal(void *v1, void *v2);
 const ae_judge_table_t ae_judge_char_enum[AE_JUDGE_ENUMNUM] = {
     {">", ae_judge_large}, 
     {">=", ae_jkudge_large_equal}, 
-    {"<", NULL}, 
-    {"<=", NULL}, 
+    {"<", ae_judge_less}, 
+    {"<=", ae_judge_less_equal}, 
     {"==", NULL}, 
     {"!=", NULL}
 };
@@ -146,7 +159,7 @@ const char ae_logic_char_enum[AE_LOGIC_ENUMNUM][4] = {
 
 /* 报警类型与字符串映射表 */
 #define AE_TYPE_TABLE_NUM 3
-ae_type_table_t ae_type_table[AE_TYPE_TABLE_NUM] = {
+const ae_type_table_t ae_type_table[AE_TYPE_TABLE_NUM] = {
     {AE_TYPE_NORMAL,    "normal"},
     {AE_TYPE_CHANGE,    "change"},
     {AE_TYPE_PAIR,      "pair"}
@@ -236,7 +249,8 @@ static void ae_get_vname(char * src, uint8_t * pla, char * out) {
     char tbuf[20] = {0};
     uint8_t len = strlen(src) - (*pla);
 
-    for(i=(*pla); i<len; i++) {
+    src += *pla;
+    for(i=0; i<len; i++) {
         if(ae_is_vname(src[i]) == AE_TRUE) {
             if(!(src[i]>='0' && src[i]<='9')) {
                 flag = 1;
@@ -253,7 +267,7 @@ static void ae_get_vname(char * src, uint8_t * pla, char * out) {
         }
     }
     strcpy(out, tbuf);
-    *pla = i;
+    *pla += i;
 }
 
 /* 获取判断字符串 */
@@ -301,6 +315,22 @@ ae_eu_result_t ae_jkudge_large_equal(void *v1, void *v2) {
     else return AE_FALSE;
 }
 
+/* < 小于 */
+ae_eu_result_t ae_judge_less(void *v1, void *v2) {
+    int val1 = (int)((*(float *)v1)*1000);
+    int val2 = (int)((*(float *)v2)*1000);
+    if(val1 < val2) return AE_TRUE;
+    else return AE_FALSE;
+}
+
+/* <= 小于等于 */
+ae_eu_result_t ae_judge_less_equal(void *v1, void *v2) {
+    int val1 = (int)((*(float *)v1)*1000);
+    int val2 = (int)((*(float *)v2)*1000);
+    if(val1 <= val2) return AE_TRUE;
+    else return AE_FALSE;
+}
+
 /* end 逻辑判断函数 */
 
 /* 通过判断字符串返回对应的判断函数指针 */
@@ -314,7 +344,7 @@ static judge_pfun_t ae_get_judge_pfun(char * name) {
 }
 
 /* 通过判断字符串返回与下一级的逻辑关系 */
-static int ae_get_logic_next(char * str, uint8_t * pla) {
+static ae_eu_logic_t ae_get_logic_next(char * str, uint8_t * pla) {
     uint8_t i = *pla, j = 0;
     char tbuf[4] = {0};
 
@@ -334,11 +364,11 @@ static int ae_get_logic_next(char * str, uint8_t * pla) {
         }
     (*pla) += j;
 
-    if(tbuf[0] == '\0') return 0;
-    else if(strcmp(tbuf, "&&") == 0) return 1;
-    else if(strcmp(tbuf, "||") == 0) return 2;
-    else if(strcmp(tbuf, ";") == 0) return 3;
-    else return 0;
+    if(tbuf[0] == '\0') return AE_NOLOGIC;
+    else if(strcmp(tbuf, "&&") == 0) return AE_AND;
+    else if(strcmp(tbuf, "||") == 0) return AE_OR;
+    else if(strcmp(tbuf, ";") == 0) return AE_DIST;
+    else return AE_NOLOGIC;
 }
 
 /* 
@@ -377,43 +407,26 @@ static ae_eu_result_t ae_parse_rule_to_list(ae_rule_t * junit, char * st_judge) 
         junit->obj_num += ae_get_strnum(new_judge, (char *)ae_logic_char_enum[i]);
     }
 
-    /* 为源数据指针数组申请内存 */
-    val_cnt = junit->obj_num * junit->dev_num;
-    junit->src_data = ae_malloc(val_cnt * 4);
-    if(junit->src_data == NULL) {
-        res = AE_MALLOC_ERROR;
-        goto EXIT;
-    }
-    memset(junit->src_data, 0, val_cnt * 4);
-
     /* 解析出数据源、判断逻辑、阈值 */
     char vname[20] = {0}, jdg[4] = {0};
-    uint8_t dev_pla = 0, strpla = 0;
-    for(i=0; i<junit->dev_num; i++) {
-        strpla = 0;
-        for(j=0; j<junit->obj_num; j++) {
-            //获取设备序列号
-            dev_pla = ae_dev_list[junit->dev_start + i]; 
+    uint8_t strpla = 0;
+    for(j=0; j<junit->obj_num; j++) {
+        //获取参数名称
+        ae_get_vname(new_judge, &strpla, vname);
+        strcpy(junit->judge_unit[j].srcname, vname);
 
-            //获取参数名称
-            ae_get_vname(new_judge, &strpla, vname);
+        //获取对应判断规则的函数指针
+        memset(jdg, 0, sizeof(jdg));
+        ae_get_jname(new_judge, &strpla, jdg);
+        junit->judge_unit[j].judge_pfun = ae_get_judge_pfun(jdg);
 
-            //获取源数据指针地址
-            junit->src_data[i * junit->obj_num + j] = ae_get_val_p(dev_pla, vname);
+        //获取阈值
+        junit->judge_unit[j].cdtval = atof(new_judge + strpla);
 
-            //获取对应判断规则的函数指针
-            memset(jdg, 0, sizeof(jdg));
-            ae_get_jname(new_judge, &strpla, jdg);
-            junit->judge_unit[j].judge_pfun = ae_get_judge_pfun(jdg);
-
-            //获取阈值
-            junit->judge_unit[j].cdtval = atof(new_judge + strpla);
-
-            //获取下一个判断的关联逻辑
-            junit->judge_unit[j].logic_next = ae_get_logic_next(new_judge, &strpla);
-        }
+        //获取下一个判断的关联逻辑
+        junit->judge_unit[j].logic_next = ae_get_logic_next(new_judge, &strpla);
     }
-
+   
     EXIT:
     return res;
 }
@@ -474,23 +487,23 @@ static ae_eu_result_t ae_parse_config(cJSON * json_root) {
     }
     memset(ae_arr_rule, 0, (sizeof(ae_rule_t) * ae_info.rule_num));
 
-    /* 给设备列表申请内存,并赋值和分配到对应报警规则结构体中 */
+    /* 给设备列表申请内存,并初始化设备ID和对应的报警规则 */
     ae_dev_list = ae_malloc(ae_info.dev_num);
     if(ae_dev_list == NULL) {
         res = AE_MALLOC_ERROR;
         goto ERR_EXIT;
     }
     memset(ae_dev_list, 0, ae_info.dev_num);
-    int dev_list_cnt = 0;
+    int dev_list_cnt = 0, rule_dev_arr_per = 0;
     cJSON * dev_list_num = NULL;
     for(int i=0; i<rule_dev_obj_num; i++) {
         json_temp = cJSON_GetArrayItem(rule_dev, i);
-        int rule_dev_arr_per = cJSON_GetArraySize(json_temp);
-        ae_arr_rule[i].dev_start = dev_list_cnt; //此报警对应的设备列表里的起始地址
-        ae_arr_rule[i].dev_num = rule_dev_arr_per; //此报警对应的设备数量
+        rule_dev_arr_per = cJSON_GetArraySize(json_temp);
         for(int j = 0; j<rule_dev_arr_per; j++) {
             dev_list_num = cJSON_GetArrayItem(json_temp, j);
-            ae_dev_list[dev_list_cnt++] = cJSON_GetNumberValue(dev_list_num);
+            ae_dev_list[dev_list_cnt].dev_id = cJSON_GetNumberValue(dev_list_num);
+            ae_dev_list[dev_list_cnt].rule = &ae_arr_rule[i];
+            dev_list_cnt++;
         }
     }
     
@@ -547,15 +560,42 @@ static ae_eu_result_t ae_parse_config(cJSON * json_root) {
 }
 
 
-
-/* 条件判断 */
-static ae_eu_result_t ae_get_rule_res(ae_rule_t *prule)
+/* 总条件判断 */
+static ae_eu_result_t ae_get_rule_res(ae_dev_list_t *popt)
 {
-    
+    int i=0;
+    float * cur_val = NULL;
+    ae_eu_result_t cur_res = AE_OK;
 
+    /* 连续判断多条规则 */
+    for(i=0; i<popt->rule->obj_num; i++) {
+        //对源数据和阈值数据进行比较
+        cur_val = ae_get_val_p(popt->dev_id, popt->rule->judge_unit[i].srcname);
+        if(popt->rule->judge_unit[i].judge_pfun) {
+            cur_res = popt->rule->judge_unit[i].judge_pfun(cur_val, &(popt->rule->judge_unit[i].cdtval));
+        }
+        else {
+            return AE_FALSE;
+        }
+        
 
-
-    return AE_FALSE;
+        //连续逻辑判断时，根据逻辑符号进行判断
+        if(popt->rule->judge_unit[i].logic_next == AE_AND) {
+            if(cur_res == AE_FALSE) return AE_FALSE;
+        }
+        else if(popt->rule->judge_unit[i].logic_next == AE_OR) {
+            if(cur_res == AE_TRUE) return AE_TRUE;
+        }
+        else if(popt->rule->judge_unit[i].logic_next == AE_DIST) {
+            return AE_OK;
+        }
+        else if(popt->rule->judge_unit[i].logic_next == AE_NOLOGIC) {
+            return cur_res;
+        }
+        else {
+            return AE_FALSE;
+        }
+    }
 }
 
 
@@ -572,29 +612,37 @@ int ae_init(void)
 /* 模块循环运行线程 */
 void ae_loop(void)
 {
-    static int num_cnt = 0;
-    ae_rule_t * p_rule_loop = NULL;
+    static int dev_cnt = 0;
     ae_eu_result_t judg_res = AE_FALSE;
+    ae_dev_list_t * cur_dev_p = NULL;
+    ae_rule_t * cur_rule_p = NULL;
 
-    if(ae_info.rule_num ==0 || ae_arr_rule == NULL) {
+    if(ae_info.rule_num ==0 || ae_info.dev_num == 0) {
         return;
     }
 
     /* 取下一个判断对象 */
-    p_rule_loop = &ae_arr_rule[num_cnt];
-    num_cnt += 1;
-    if(num_cnt >= ae_info.rule_num) num_cnt = 0;
+    cur_dev_p = &ae_dev_list[dev_cnt];
+    cur_rule_p = cur_dev_p->rule;
+    dev_cnt++;
+    if(dev_cnt >= ae_info.dev_num) dev_cnt = 0;
 
     /* 判断是否开启 */
-    if(p_rule_loop->para.para_flag & 0x01 == 0) {
+    if(cur_rule_p->para.para_flag & 0x01 == 0) {
         return;
     }
 
     /* 判断结果真假 */
-    judg_res = ae_get_rule_res(p_rule_loop);
+    judg_res = ae_get_rule_res(cur_dev_p);
 
+    /* 报警输出 */
+    if(judg_res == AE_TRUE || judg_res == AE_OK) {
+        /* 报警判断为真 */
+        printf(" dev_id [%d] : alarm on, out: %s \n", cur_dev_p->dev_id, cur_rule_p->out_opt);
+    }
+    else {
 
-
+    }
 }
 /****end****/
 
