@@ -212,7 +212,7 @@ static uint8_t ae_get_strnum(char *buf, char *tarbuf) {
 static char *ae_my_strdup(char *input)
 {
     int len = strlen(input);
-    char *output = (char *)ae_malloc(len + 1); //加入一个结束符的长度
+    char *output = ae_malloc(len + 1); //加入一个结束符的长度
     if (output == NULL)
         return NULL;
     memset(output, 0, len + 1);
@@ -507,12 +507,13 @@ static ae_eu_result_t ae_parse_config(cJSON * json_root) {
     memset(ae_arr_rule, 0, (sizeof(ae_rule_t) * ae_info.rule_num));
 
     /* 给设备列表申请内存,并初始化设备ID和对应的报警规则 */
-    ae_dev_list = ae_malloc(ae_info.dev_num);
+    ae_dev_list = ae_malloc(ae_info.dev_num * sizeof(ae_dev_list_t *));
     if(ae_dev_list == NULL) {
         res = AE_MALLOC_ERROR;
         goto ERR_EXIT;
     }
-    memset(ae_dev_list, 0, ae_info.dev_num);
+    memset(ae_dev_list, 0, ae_info.dev_num * sizeof(ae_dev_list_t *));
+    
     int dev_list_cnt = 0, rule_dev_arr_per = 0;
     cJSON * dev_list_num = NULL;
     for(int i=0; i<rule_dev_obj_num; i++) {
@@ -525,7 +526,7 @@ static ae_eu_result_t ae_parse_config(cJSON * json_root) {
             dev_list_cnt++;
         }
     }
-    
+
     /* 将JSON格式种的数据解析到结构体中 */
     for(int i=0; i<ae_info.rule_num; i++) {
         //解析判断规则
@@ -599,7 +600,7 @@ static ae_eu_result_t ae_judge_normal(ae_dev_list_t *popt) {
 
 /* 启停时间段判断 */
 typedef struct ae_runsaso_t {
-    uint32_t timestamp;
+    uint32_t start_timestamp;
     float start_EPI;
     float stop_EPI;
     uint8_t flag; //bit0：0-停止 1-启动
@@ -613,25 +614,20 @@ static ae_eu_result_t ae_judge_runsaso(ae_dev_list_t *popt) {
     int i = 0;
     float * cur_val = NULL;
     ae_eu_result_t cur_res = AE_FALSE, res1, res2;
-    uint8_t jump_dist_flag = 0;
     ae_runsaso_t * saveinfo = NULL;
-
+    
     /* 初始化savebuf */
     if(popt->savebuf == NULL) {
         popt->savebuf = ae_malloc(sizeof(ae_runsaso_t));
         if(popt->savebuf == NULL) {
             return AE_FALSE;
         }
+        memset(popt->savebuf, 0, sizeof(ae_runsaso_t));
     }
     saveinfo = (ae_runsaso_t *)popt->savebuf;
 
+    /* 判断res1 */
     for(i=0; i<popt->rule->obj_num; i++) {
-        if(jump_dist_flag) {
-            if(popt->rule->judge_unit[i].logic_next != AE_DIST) {
-                continue; //直接跳到;逻辑符后判断
-            }
-        }
-       
         /* 获取数据后判断 */
         cur_val = ae_get_val_p(popt->dev_id, popt->rule->judge_unit[i].srcname);
         if(popt->rule->judge_unit[i].judge_pfun) {
@@ -643,64 +639,84 @@ static ae_eu_result_t ae_judge_runsaso(ae_dev_list_t *popt) {
 
         /* 判断逻辑关系 */
         if(popt->rule->judge_unit[i].logic_next == AE_AND) {
-            if(jump_dist_flag == 0) {
-                if(cur_res == AE_FALSE) {
-                    res1 = cur_res;
-                    jump_dist_flag = 1;
-                }
-            }
-            else {
-                if(cur_res == AE_FALSE) {
-                    res2 = cur_res;
-                    break;
-                }
-            }
-        }
-        else if(popt->rule->judge_unit[i].logic_next == AE_OR) {
-            if(jump_dist_flag == 0) {
-                if(cur_res == AE_TRUE) {
-                    res1 = cur_res;
-                    jump_dist_flag = 1;
-                }
-            }
-            else {
-                if(cur_res == AE_TRUE) {
-                    res2 = cur_res;
-                    break;
-                }
-            }
-        }
-        else if(popt->rule->judge_unit[i].logic_next == AE_DIST) {
-            if(jump_dist_flag == 0) {
-                res1 = cur_res;
-            }
-            else {
+            if(cur_res == AE_FALSE) {
                 res1 = cur_res;
                 break;
             }
-            
         }
-    } 
-
-    /* 判断成功，进行输出 */
-    if(res1 == res2) {
-
+        else if(popt->rule->judge_unit[i].logic_next == AE_OR) {
+            if(cur_res == AE_TRUE) {
+                res1 = cur_res;
+                break;
+            }
+        }
+        else if(popt->rule->judge_unit[i].logic_next == AE_DIST) {
+            res1 = cur_res;
+            break;
+        }
     }
 
+    /* 判断res2 */
+    for(i++; i<popt->rule->obj_num; i++) {
+        cur_val = ae_get_val_p(popt->dev_id, popt->rule->judge_unit[i].srcname);
+        if(popt->rule->judge_unit[i].judge_pfun) {
+            cur_res = popt->rule->judge_unit[i].judge_pfun(cur_val, &(popt->rule->judge_unit[i].cdtval));
+        }
+        else {
+            return AE_FALSE;
+        }
+
+        /* 判断逻辑关系 */
+        if(popt->rule->judge_unit[i].logic_next == AE_AND) {
+            if(cur_res == AE_FALSE) {
+                res2 = cur_res;
+                break;
+            }
+        }
+        else if(popt->rule->judge_unit[i].logic_next == AE_OR) {
+            if(cur_res == AE_TRUE) {
+                res2 = cur_res;
+                break;
+            }
+        }
+        else if(popt->rule->judge_unit[i].logic_next == AE_NOLOGIC) {
+            res2 = cur_res;
+            break;
+        }
+    }
+
+    /* 判断成功，进行输出 */
+    if(res1 == AE_TRUE && res2 == AE_FALSE && ((saveinfo->flag & 0x01) == 0)) {
+        /* 启动 */
+        saveinfo->flag |= 0x01;
+        printf(" dev_id[%d], run start\n", popt->dev_id);
+        return AE_OK;
+    }
+    else if(res1 == AE_FALSE && res2 == AE_TRUE && (saveinfo->flag & 0x01)) {
+        /* 停止 */
+        saveinfo->flag &= ~0x01;
+        printf(" dev_id[%d], run stop\n", popt->dev_id);
+        return AE_OK;
+    }
+    else {
+        return AE_FALSE;
+    }
 }
 
 /* 进行判断入口 */
 static ae_eu_result_t ae_rule_pro(ae_dev_list_t *popt)
 {
     ae_eu_result_t res = AE_FALSE;
-
+    printf(" [DBG s] \n");
     switch(popt->rule->para.type) 
     {
         case AE_TYPE_NORMAL:
+            printf(" [DBG 5] \n");
             res = ae_judge_normal(popt);
         break;
 
         case AE_TYPE_RUNSASO:
+            printf(" [DBG 4] \n");
             res = ae_judge_runsaso(popt);
         break;
 
@@ -748,15 +764,6 @@ void ae_loop(void)
     /* 进行规则判断并执行结果输出 */
     judg_res = ae_rule_pro(cur_dev_p);
 
-    /* 报警输出 */
-    if(judg_res == AE_TRUE || judg_res == AE_OK) {
-        /* 报警判断为真 */
-        printf(" dev_id [%d] : alarm on, rule: %s, out: %s, para: %s \n", 
-            cur_dev_p->dev_id, cur_rule_p->rule, cur_rule_p->out_opt, cur_rule_p->para.para_string);
-    }
-    else {
-
-    }
 }
 /****end****/
 
@@ -788,11 +795,11 @@ void main(char argc, char *agrv[])
     if(root == NULL) {
         goto EXIT;
     }
-
+    
     /* 将JSON数据解析到ae结构体中 */
     ae_eu_result_t res = ae_parse_config(root);
     cJSON_Delete(root);
-
+    
     while(1) {
         ae_loop();
     }
