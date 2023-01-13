@@ -7,8 +7,8 @@
         "projectName": "yzq_prj2"
     },
     "rule": [
-        "P>1&&Ia>0.5",
-        "Ua>300"
+        "Ua >= 230 && Ub > 240",
+        "Ua > 200 && P > 1; Ua < 150 || P < 0.5"
     ],
     "rule_out": [
         "method=alarm",
@@ -23,17 +23,15 @@
             "switch": true,
             "tid":1,
             "period": 5,
-            "type": "normal",
-            "p1": "high",
-            "p2": "sud",
-            "p3": "big"
+            "type": "NORMAL",
+            "para": "high"
         },
         {
             "switch": true,
             "tid":1,
             "period": 10,
-            "type": "pair",
-            "p1": "s1e0"
+            "type": "RUNSASO",
+            "para": "RUN_START;RUN_STOP"
         }
     ]
 }

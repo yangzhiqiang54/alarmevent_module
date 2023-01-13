@@ -75,7 +75,7 @@ typedef enum {
 typedef enum {
     AE_TYPE_NORMAL = 0,
     AE_TYPE_CHANGE,
-    AE_TYPE_RUNPAIR,
+    AE_TYPE_RUNSASO,
 }ae_eu_type_t;
 /****end****/
 
@@ -164,9 +164,9 @@ const char ae_logic_char_enum[AE_LOGIC_ENUMNUM][4] = {
 /* 报警类型与字符串映射表 */
 #define AE_TYPE_TABLE_NUM 3
 const ae_type_table_t ae_type_table[AE_TYPE_TABLE_NUM] = {
-    {AE_TYPE_NORMAL,    "normal"},
-    {AE_TYPE_CHANGE,    "change"},
-    {AE_TYPE_RUNPAIR,   "runpair"}
+    {AE_TYPE_NORMAL,    "NORMAL"},
+    {AE_TYPE_CHANGE,    "CHANGE"},
+    {AE_TYPE_RUNSASO,   "RUNSASO"}
 };
 
 /* 链表操作 */
@@ -584,11 +584,9 @@ static ae_eu_result_t ae_judge_normal(ae_dev_list_t *popt) {
         if(popt->rule->judge_unit[i].logic_next == AE_AND) {
             if(cur_res == AE_FALSE) return AE_FALSE;
         }
-        else if(popt->rule->judge_unit[i].logic_next == AE_OR) {
+        else if(popt->rule->judge_unit[i].logic_next == AE_OR || 
+                popt->rule->judge_unit[i].logic_next == AE_DIST) {
             if(cur_res == AE_TRUE) return AE_TRUE;
-        }
-        else if(popt->rule->judge_unit[i].logic_next == AE_DIST) {
-            return AE_OK;
         }
         else if(popt->rule->judge_unit[i].logic_next == AE_NOLOGIC) {
             return cur_res;
@@ -600,22 +598,110 @@ static ae_eu_result_t ae_judge_normal(ae_dev_list_t *popt) {
 }
 
 /* 启停时间段判断 */
-static ae_eu_result_t ae_judge_runpair(ae_dev_list_t *popt) {
-    
+typedef struct ae_runsaso_t {
+    uint32_t timestamp;
+    float start_EPI;
+    float stop_EPI;
+    uint8_t flag; //bit0：0-停止 1-启动
+}ae_runsaso_t;
+static ae_eu_result_t ae_judge_runsaso(ae_dev_list_t *popt) {
+    /*
+        "rule": "Ua > 200 && P > 1; Ua < 150 || P < 0.5"
+        "para": "RUN_START;RUN_STOP"
+    */
+
+    int i = 0;
+    float * cur_val = NULL;
+    ae_eu_result_t cur_res = AE_FALSE, res1, res2;
+    uint8_t jump_dist_flag = 0;
+    ae_runsaso_t * saveinfo = NULL;
+
+    /* 初始化savebuf */
+    if(popt->savebuf == NULL) {
+        popt->savebuf = ae_malloc(sizeof(ae_runsaso_t));
+        if(popt->savebuf == NULL) {
+            return AE_FALSE;
+        }
+    }
+    saveinfo = (ae_runsaso_t *)popt->savebuf;
+
+    for(i=0; i<popt->rule->obj_num; i++) {
+        if(jump_dist_flag) {
+            if(popt->rule->judge_unit[i].logic_next != AE_DIST) {
+                continue; //直接跳到;逻辑符后判断
+            }
+        }
+       
+        /* 获取数据后判断 */
+        cur_val = ae_get_val_p(popt->dev_id, popt->rule->judge_unit[i].srcname);
+        if(popt->rule->judge_unit[i].judge_pfun) {
+            cur_res = popt->rule->judge_unit[i].judge_pfun(cur_val, &(popt->rule->judge_unit[i].cdtval));
+        }
+        else {
+            return AE_FALSE;
+        }
+
+        /* 判断逻辑关系 */
+        if(popt->rule->judge_unit[i].logic_next == AE_AND) {
+            if(jump_dist_flag == 0) {
+                if(cur_res == AE_FALSE) {
+                    res1 = cur_res;
+                    jump_dist_flag = 1;
+                }
+            }
+            else {
+                if(cur_res == AE_FALSE) {
+                    res2 = cur_res;
+                    break;
+                }
+            }
+        }
+        else if(popt->rule->judge_unit[i].logic_next == AE_OR) {
+            if(jump_dist_flag == 0) {
+                if(cur_res == AE_TRUE) {
+                    res1 = cur_res;
+                    jump_dist_flag = 1;
+                }
+            }
+            else {
+                if(cur_res == AE_TRUE) {
+                    res2 = cur_res;
+                    break;
+                }
+            }
+        }
+        else if(popt->rule->judge_unit[i].logic_next == AE_DIST) {
+            if(jump_dist_flag == 0) {
+                res1 = cur_res;
+            }
+            else {
+                res1 = cur_res;
+                break;
+            }
+            
+        }
+    } 
+
+    /* 判断成功，进行输出 */
+    if(res1 == res2) {
+
+    }
+
 }
 
 /* 进行判断入口 */
-static ae_eu_result_t ae_get_rule_res(ae_dev_list_t *popt)
+static ae_eu_result_t ae_rule_pro(ae_dev_list_t *popt)
 {
     ae_eu_result_t res = AE_FALSE;
 
-    switch(popt->rule->para.type == AE_TYPE_NORMAL) {
+    switch(popt->rule->para.type) 
+    {
         case AE_TYPE_NORMAL:
             res = ae_judge_normal(popt);
         break;
 
-        case AE_TYPE_RUNPAIR:
-            res = ae_judge_pair(popt);
+        case AE_TYPE_RUNSASO:
+            res = ae_judge_runsaso(popt);
         break;
 
         default: 
@@ -623,8 +709,6 @@ static ae_eu_result_t ae_get_rule_res(ae_dev_list_t *popt)
         break;
     }
     return res;
-
-    
 }
 
 
@@ -661,8 +745,8 @@ void ae_loop(void)
         return;
     }
 
-    /* 判断结果真假 */
-    judg_res = ae_get_rule_res(cur_dev_p);
+    /* 进行规则判断并执行结果输出 */
+    judg_res = ae_rule_pro(cur_dev_p);
 
     /* 报警输出 */
     if(judg_res == AE_TRUE || judg_res == AE_OK) {
