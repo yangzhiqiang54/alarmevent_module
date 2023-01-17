@@ -36,7 +36,7 @@ typedef struct {
 }test_data_t;
 test_data_t test_devdata[3][10] = {
     {
-        {"Ua", 225.11},{"Ub", 221},{"Uc", 221},
+        {"Ua", 245.11},{"Ub", 221},{"Uc", 221},
         {"Ia", 5},{"Ib", 6},{"Ic", 7},
         {"Pa", 0.1},{"Pb", 0.2},{"Pc", 0.3},{"P", 0.6}
     },
@@ -85,7 +85,7 @@ typedef struct ae_judge_t {
     float cdtval; //条件值
     judge_pfun_t judge_pfun; //进行各种逻辑判断的函数指针
     ae_eu_logic_t logic_next; //0-NULL  1-&&  2-||  3-;
-    char srcname[20]; //规则中字符串名称
+    char srcname[12]; //规则中字符串名称
 }ae_judge_t;
 
 typedef struct ae_para_t {
@@ -507,12 +507,12 @@ static ae_eu_result_t ae_parse_config(cJSON * json_root) {
     memset(ae_arr_rule, 0, (sizeof(ae_rule_t) * ae_info.rule_num));
 
     /* 给设备列表申请内存,并初始化设备ID和对应的报警规则 */
-    ae_dev_list = ae_malloc(ae_info.dev_num * sizeof(ae_dev_list_t *));
+    ae_dev_list = ae_malloc(sizeof(ae_dev_list_t) * ae_info.dev_num);
     if(ae_dev_list == NULL) {
         res = AE_MALLOC_ERROR;
         goto ERR_EXIT;
     }
-    memset(ae_dev_list, 0, ae_info.dev_num * sizeof(ae_dev_list_t *));
+    memset(ae_dev_list, 0, sizeof(ae_dev_list_t) * ae_info.dev_num);
     
     int dev_list_cnt = 0, rule_dev_arr_per = 0;
     cJSON * dev_list_num = NULL;
@@ -568,7 +568,7 @@ static ae_eu_result_t ae_parse_config(cJSON * json_root) {
 static ae_eu_result_t ae_judge_normal(ae_dev_list_t *popt) {
     int i = 0;
     float * cur_val = NULL;
-    ae_eu_result_t cur_res = AE_FALSE;
+    ae_eu_result_t res, cur_res = AE_FALSE;
 
     /* 连续判断多条规则 */
     for(i=0; i<popt->rule->obj_num; i++) {
@@ -578,24 +578,35 @@ static ae_eu_result_t ae_judge_normal(ae_dev_list_t *popt) {
             cur_res = popt->rule->judge_unit[i].judge_pfun(cur_val, &(popt->rule->judge_unit[i].cdtval));
         }
         else {
-            return AE_FALSE;
+            res = AE_FALSE;
+            break;
         }
 
         //连续逻辑判断时，根据逻辑符号进行判断
         if(popt->rule->judge_unit[i].logic_next == AE_AND) {
-            if(cur_res == AE_FALSE) return AE_FALSE;
+            if(cur_res == AE_FALSE) {
+                res = AE_FALSE;
+                break;
+            }
         }
         else if(popt->rule->judge_unit[i].logic_next == AE_OR || 
                 popt->rule->judge_unit[i].logic_next == AE_DIST) {
-            if(cur_res == AE_TRUE) return AE_TRUE;
+            if(cur_res == AE_TRUE) {
+                res = AE_TRUE;
+                break;
+            }
         }
         else if(popt->rule->judge_unit[i].logic_next == AE_NOLOGIC) {
-            return cur_res;
+            res = cur_res;
+            break;
         }
         else {
-            return AE_FALSE;
+            res = AE_FALSE;
+            break;
         }
     }
+
+    return res;
 }
 
 /* 启停时间段判断 */
@@ -707,20 +718,27 @@ static ae_eu_result_t ae_judge_runsaso(ae_dev_list_t *popt) {
 static ae_eu_result_t ae_rule_pro(ae_dev_list_t *popt)
 {
     ae_eu_result_t res = AE_FALSE;
-    printf(" [DBG s] \n");
+
+    #if 1
+    printf("\n [DBG swt (dev_id:%d)] \n", popt->dev_id);
+    printf(" [DBG swt (popt:%d)] \n", popt);
+    printf(" [DBG swt (rule:%d)] \n", popt->rule);
+    printf(" [DBG swt (para type:%d)] \n", popt->rule->para.type);
+    printf(" [DBG swt (prar dcs:%s)] \n", popt->rule->para.para_string);
+    #endif
+
     switch(popt->rule->para.type) 
     {
         case AE_TYPE_NORMAL:
-            printf(" [DBG 5] \n");
             res = ae_judge_normal(popt);
         break;
 
         case AE_TYPE_RUNSASO:
-            printf(" [DBG 4] \n");
             res = ae_judge_runsaso(popt);
         break;
 
         default: 
+            printf(" [DBG type error(%d)] \n", popt->rule->para.type);
             res = AE_FALSE;
         break;
     }
@@ -760,7 +778,7 @@ void ae_loop(void)
     if(cur_rule_p->para.para_flag & 0x01 == 0) {
         return;
     }
-
+    
     /* 进行规则判断并执行结果输出 */
     judg_res = ae_rule_pro(cur_dev_p);
 
@@ -774,7 +792,7 @@ void main(char argc, char *agrv[])
     char *fbuf = NULL;
     int rw = 0, file_size = 0;
     struct stat stat_temp;
-
+    
     /* 读取文件 */
     stat(".\\RULE.json", &stat_temp);
     file_size = stat_temp.st_size;
