@@ -34,21 +34,24 @@ typedef struct {
     char name[8];
     float val;
 }test_data_t;
-test_data_t test_devdata[3][10] = {
+test_data_t test_devdata[3][11] = {
     {
         {"Ua", 245.11},{"Ub", 221},{"Uc", 221},
         {"Ia", 5},{"Ib", 6},{"Ic", 7},
-        {"Pa", 0.1},{"Pb", 0.2},{"Pc", 0.3},{"P", 0.6}
+        {"Pa", 0.1},{"Pb", 0.2},{"Pc", 0.3},{"P", 0.6},
+        {"bit", 1}
     },
     {
-        {"Ua", 235.21},{"Ub", 220},{"Uc", 261},
+        {"Ua", 220.21},{"Ub", 220},{"Uc", 261},
         {"Ia", 5},{"Ib", 6},{"Ic", 7},
-        {"Pa", 0.1},{"Pb", 0.2},{"Pc", 0.3},{"P", 0.6}
+        {"Pa", 0.1},{"Pb", 0.2},{"Pc", 0.3},{"P", 0.6},
+        {"bit", 1}
     },
     {
         {"Ua", 220.31},{"Ub", 221},{"Uc", 221},
         {"Ia", 5},{"Ib", 6},{"Ic", 7},
-        {"Pa", 0.1},{"Pb", 0.2},{"Pc", 0.3},{"P", 0.6}
+        {"Pa", 0.1},{"Pb", 0.2},{"Pc", 0.3},{"P", 0.6},
+        {"bit", 1}
     }
 };
 /****end****/
@@ -109,6 +112,7 @@ typedef struct ae_dev_list_t {
     uint8_t * savebuf;
     uint8_t dev_id;
     uint8_t flag;
+    //bit0: normal type 0-off 1-on
 }ae_dev_list_t;
 
 typedef struct ae_info_t {
@@ -606,13 +610,24 @@ static ae_eu_result_t ae_judge_normal(ae_dev_list_t *popt) {
         }
     }
 
+    /* 结果输出 */
+    if(res == AE_TRUE && (popt->flag & 0x01) == 0) {
+        //状态变化为有报警
+        popt->flag |= 0x01;
+        printf(" dev_id[%d], %s on\n", popt->dev_id, popt->rule->para.para_string);
+    }
+    else if(res == AE_FALSE && (popt->flag & 0x01)) {
+        //状态变化无有报警
+        popt->flag &= ~0x01;
+        printf(" dev_id[%d], %s off\n", popt->dev_id, popt->rule->para.para_string);
+    }
+
     return res;
 }
 
 /* 启停时间段判断 */
 typedef struct ae_runsaso_t {
     uint32_t start_timestamp;
-    float start_EPI;
     float stop_EPI;
     uint8_t flag; //bit0：0-停止 1-启动
 }ae_runsaso_t;
@@ -624,7 +639,7 @@ static ae_eu_result_t ae_judge_runsaso(ae_dev_list_t *popt) {
 
     int i = 0;
     float * cur_val = NULL;
-    ae_eu_result_t cur_res = AE_FALSE, res1, res2;
+    ae_eu_result_t cur_res = AE_FALSE, res, res1, res2;
     ae_runsaso_t * saveinfo = NULL;
     
     /* 初始化savebuf */
@@ -701,17 +716,31 @@ static ae_eu_result_t ae_judge_runsaso(ae_dev_list_t *popt) {
         /* 启动 */
         saveinfo->flag |= 0x01;
         printf(" dev_id[%d], run start\n", popt->dev_id);
-        return AE_OK;
+
+        /* 记录下当前时间戳和EPI */
+        /* 将设备号、“RUN_START”、saveinfo->start_timestamp、saveinfo->stop_EPI发送给协议接收队列 */
+        //saveinfo->start_timestamp = 
+        //saveinfo->stop_EPI = 
+
+
+        res = AE_OK;
     }
     else if(res1 == AE_FALSE && res2 == AE_TRUE && (saveinfo->flag & 0x01)) {
         /* 停止 */
         saveinfo->flag &= ~0x01;
         printf(" dev_id[%d], run stop\n", popt->dev_id);
-        return AE_OK;
+
+        /* 获取当前时间戳和EPI */
+        /* 将设备号、“RUN_STOP”、saveinfo->start_timestamp、saveinfo->stop_EPI、当前时间戳和EPI 发送给协议接收队列 */
+
+
+        res = AE_OK;
     }
     else {
-        return AE_FALSE;
+        res = AE_FALSE;
     }
+
+    return res;
 }
 
 /* 进行判断入口 */
@@ -719,7 +748,7 @@ static ae_eu_result_t ae_rule_pro(ae_dev_list_t *popt)
 {
     ae_eu_result_t res = AE_FALSE;
 
-    #if 1
+    #if 0
     printf("\n [DBG swt (dev_id:%d)] \n", popt->dev_id);
     printf(" [DBG swt (popt:%d)] \n", popt);
     printf(" [DBG swt (rule:%d)] \n", popt->rule);
