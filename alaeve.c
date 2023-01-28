@@ -79,6 +79,7 @@ typedef enum {
     AE_TYPE_NORMAL = 0,
     AE_TYPE_CHANGE,
     AE_TYPE_RUNSASO,
+    AE_TYPE_BIT,
 }ae_eu_type_t;
 /****end****/
 
@@ -109,7 +110,7 @@ typedef struct ae_rule_t {
 
 typedef struct ae_dev_list_t {
     ae_rule_t * rule;
-    uint8_t * savebuf;
+    void * savebuf;
     uint8_t dev_id;
     uint8_t flag;
     //bit0: normal type 0-off 1-on
@@ -625,6 +626,49 @@ static ae_eu_result_t ae_judge_normal(ae_dev_list_t *popt) {
     return res;
 }
 
+/* 变化判断 */
+static ae_eu_result_t ae_judge_change(ae_dev_list_t *popt) {
+    float * valf;
+    int val_now, val_last;
+    ae_eu_result_t res = AE_FALSE;
+
+    /* 初始化savebuf */
+    if(popt->savebuf == NULL) {
+        //支持一个数据的变化判断 用整形数据类型，浮点型一般不会关注小数点变化
+        popt->savebuf = ae_malloc(sizeof(int));
+        if(popt->savebuf == NULL) {
+            return AE_FALSE;
+        }
+        memset(popt->savebuf, 0, sizeof(int));
+        
+        //第一次赋值
+        valf = ae_get_val_p(popt->dev_id, popt->rule->judge_unit[0].srcname);
+        val_now = (int)*valf;
+        *(int *)(popt->savebuf) = val_now;
+
+        res = AE_FALSE;
+        goto EXIT;
+    }
+
+    valf = ae_get_val_p(popt->dev_id, popt->rule->judge_unit[0].srcname);
+    val_now = (int)*valf;
+    val_last = *(int *)(popt->savebuf);
+    if( (val_now) != (val_last) ) {
+        //值发生了变化
+        res = AE_TRUE;
+        *(int *)(popt->savebuf) = val_now;
+    }
+
+    /* 结果输出 */
+    if(res == AE_TRUE) {
+        printf(" dev_id[%d], %s change, last val: %d, now val: %d\n", 
+            popt->dev_id, popt->rule->judge_unit[0].srcname, val_last, val_now);
+    }
+
+    EXIT:
+    return res;
+}
+
 /* 启停时间段判断 */
 typedef struct ae_runsaso_t {
     uint32_t start_timestamp;
@@ -722,7 +766,6 @@ static ae_eu_result_t ae_judge_runsaso(ae_dev_list_t *popt) {
         //saveinfo->start_timestamp = 
         //saveinfo->stop_EPI = 
 
-
         res = AE_OK;
     }
     else if(res1 == AE_FALSE && res2 == AE_TRUE && (saveinfo->flag & 0x01)) {
@@ -764,6 +807,10 @@ static ae_eu_result_t ae_rule_pro(ae_dev_list_t *popt)
 
         case AE_TYPE_RUNSASO:
             res = ae_judge_runsaso(popt);
+        break;
+
+        case AE_TYPE_CHANGE:
+            res = ae_judge_change(popt);
         break;
 
         default: 
