@@ -114,7 +114,11 @@ typedef struct ae_dev_list_t {
     void * savebuf;
     uint8_t dev_id;
     uint8_t flag;
-    //bit0: normal type 0-off 1-on
+    /*
+        type    |   bit0            |   bit1
+        normal  |   0-off 1-on      |   
+        runsaso |   0-stop 1-run    |   
+    */
 }ae_dev_list_t;
 
 typedef struct ae_info_t {
@@ -881,19 +885,19 @@ static ae_eu_result_t ae_rule_pro(ae_dev_list_t *popt)
 
     switch(popt->rule->para.type) 
     {
-        case AE_TYPE_NORMAL:
+        case AE_TYPE_NORMAL: //常规阈值判断
             res = ae_judge_normal(popt);
         break;
 
-        case AE_TYPE_RUNSASO:
+        case AE_TYPE_RUNSASO: //设备启动停止判断
             res = ae_judge_runsaso(popt);
         break;
 
-        case AE_TYPE_CHANGE:
+        case AE_TYPE_CHANGE: //值变化判断
             res = ae_judge_change(popt);
         break;
 
-        case AE_TYPE_BIT:
+        case AE_TYPE_BIT: //比特位变化判断
             res = ae_judge_bit(popt);
         break;
 
