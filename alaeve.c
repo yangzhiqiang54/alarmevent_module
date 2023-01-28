@@ -30,11 +30,12 @@
 
 
 /* 测试数据 */
+#define TEST_DATA_MAXNUM    11
 typedef struct {
     char name[8];
     float val;
 }test_data_t;
-test_data_t test_devdata[3][11] = {
+test_data_t test_devdata[3][TEST_DATA_MAXNUM] = {
     {
         {"Ua", 245.11},{"Ub", 221},{"Uc", 221},
         {"Ia", 5},{"Ib", 6},{"Ic", 7},
@@ -167,11 +168,12 @@ const char ae_logic_char_enum[AE_LOGIC_ENUMNUM][4] = {
 
 
 /* 报警类型与字符串映射表 */
-#define AE_TYPE_TABLE_NUM 3
+#define AE_TYPE_TABLE_NUM 4
 const ae_type_table_t ae_type_table[AE_TYPE_TABLE_NUM] = {
     {AE_TYPE_NORMAL,    "NORMAL"},
     {AE_TYPE_CHANGE,    "CHANGE"},
-    {AE_TYPE_RUNSASO,   "RUNSASO"}
+    {AE_TYPE_RUNSASO,   "RUNSASO"},
+    {AE_TYPE_BIT,       "BIT"}
 };
 
 /* 链表操作 */
@@ -299,7 +301,7 @@ static void ae_get_jname(char * srcstr, uint8_t * pla, char * tarstr) {
     return: 源数据指针地址
 */
 static float * ae_get_val_p(uint8_t dnum, char * vstr) {
-    for(int i=0; i<10; i++) {
+    for(int i=0; i<TEST_DATA_MAXNUM; i++) {
         if(strcmp(test_devdata[dnum - 1][i].name, vstr) == 0) {
             return &test_devdata[dnum - 1][i].val;
         }
@@ -650,6 +652,7 @@ static ae_eu_result_t ae_judge_change(ae_dev_list_t *popt) {
         goto EXIT;
     }
 
+    /* 判断值是否变化 */
     valf = ae_get_val_p(popt->dev_id, popt->rule->judge_unit[0].srcname);
     val_now = (int)*valf;
     val_last = *(int *)(popt->savebuf);
@@ -661,7 +664,7 @@ static ae_eu_result_t ae_judge_change(ae_dev_list_t *popt) {
 
     /* 结果输出 */
     if(res == AE_TRUE) {
-        printf(" dev_id[%d], %s change, last val: %d, now val: %d\n", 
+        printf(" dev_id[%d], \"%s\" change, last val: %d, now val: %d\n", 
             popt->dev_id, popt->rule->judge_unit[0].srcname, val_last, val_now);
     }
 
@@ -786,6 +789,83 @@ static ae_eu_result_t ae_judge_runsaso(ae_dev_list_t *popt) {
     return res;
 }
 
+/* 比特位变化判断 */
+static ae_eu_result_t ae_judge_bit(ae_dev_list_t *popt) {
+    float * valf;
+    int val_now, val_last;
+    ae_eu_result_t res = AE_FALSE;
+
+    /* 初始化savebuf */
+    if(popt->savebuf == NULL) {
+        //支持一个数据的变化判断 用整形数据类型，浮点型一般不会关注小数点变化
+        popt->savebuf = ae_malloc(sizeof(int));
+        if(popt->savebuf == NULL) {
+            return AE_FALSE;
+        }
+        memset(popt->savebuf, 0, sizeof(int));
+        
+        //第一次赋值
+        valf = ae_get_val_p(popt->dev_id, popt->rule->judge_unit[0].srcname);
+        val_now = (int)*valf;
+        *(int *)(popt->savebuf) = val_now;
+
+        res = AE_FALSE;
+        goto EXIT;
+    }
+
+    /* 根据para要求判断位是否变化 */
+    valf = ae_get_val_p(popt->dev_id, popt->rule->judge_unit[0].srcname);
+    val_now = (int)*valf;
+    val_last = *(int *)(popt->savebuf);
+
+    /* "para": "b0-change;b1-to0;b2-to1;" */
+    uint8_t i = 0, j = 0, bnum = 0;
+    char tbuf[8] = {0};
+    while(popt->rule->para.para_string[i] != '\0') {
+        if(popt->rule->para.para_string[i] != '-' && popt->rule->para.para_string[i] != ';') {
+            tbuf[j++] = popt->rule->para.para_string[i];
+        }
+        else {
+            j = 0;
+
+            /* 判断 */
+            if(popt->rule->para.para_string[i] == '-') {
+                bnum = atoi(&tbuf[1]);
+                memset(tbuf, 0, sizeof(tbuf));
+            }
+            else if(popt->rule->para.para_string[i] == ';') {
+                if(strcmp(tbuf, "change") == 0) {
+                    if((val_last ^ val_now) & (1<<bnum)) {
+                        printf(" dev_id[%d], bit:%d change, now val: %d\n", popt->dev_id, bnum, ((val_now>>bnum)&0x01));
+                        res = AE_TRUE;
+                    }
+                }
+                else if(strcmp(tbuf, "to0") == 0){
+                    if( (val_last & (0x01<<bnum)) && ((val_now & (0x01<<bnum)) == 0) ) {
+                        printf(" dev_id[%d], bit:%d change to 0\n", popt->dev_id, bnum);
+                        res = AE_TRUE;
+                    }
+                }
+                else if(strcmp(tbuf, "to1") == 0){
+                    if( ((val_last & (0x01<<bnum)) == 0) && (val_now & (0x01<<bnum)) ) {
+                        printf(" dev_id[%d], bit:%d change to 1\n", popt->dev_id, bnum);
+                        res = AE_TRUE;
+                    }
+                }
+                memset(tbuf, 0, sizeof(tbuf));
+            }
+        }
+
+        i++;
+    }
+
+    /* 更新保存的值 */
+    *(int *)(popt->savebuf) = val_now;
+
+    EXIT:
+    return res;
+}
+
 /* 进行判断入口 */
 static ae_eu_result_t ae_rule_pro(ae_dev_list_t *popt)
 {
@@ -811,6 +891,10 @@ static ae_eu_result_t ae_rule_pro(ae_dev_list_t *popt)
 
         case AE_TYPE_CHANGE:
             res = ae_judge_change(popt);
+        break;
+
+        case AE_TYPE_BIT:
+            res = ae_judge_bit(popt);
         break;
 
         default: 
