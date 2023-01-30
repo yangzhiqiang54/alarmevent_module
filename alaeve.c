@@ -432,7 +432,7 @@ static ae_eu_result_t ae_parse_rule_to_list(ae_rule_t * junit, char * st_judge) 
 
     /* 通过逻辑符号计算出此报警规则判断总个数 */
     junit->obj_num = 1; //单个条件时，没有逻辑符号
-    for(i=0; i<AE_JUDGE_ENUMNUM; i++) {
+    for(i=0; i<AE_LOGIC_ENUMNUM; i++) {
         junit->obj_num += ae_get_strnum(new_judge, (char *)ae_logic_char_enum[i]);
     }
 
@@ -939,7 +939,7 @@ void ae_loop(void)
     if(dev_cnt >= ae_info.dev_num) dev_cnt = 0;
 
     /* 判断是否开启 */
-    if(cur_rule_p->para.para_flag & 0x01 == 0) {
+    if((cur_rule_p->para.para_flag & 0x01) == 0) {
         return;
     }
     
