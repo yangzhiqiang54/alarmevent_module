@@ -384,14 +384,13 @@ static ae_eu_logic_t ae_get_logic_next(char * str, uint8_t * pla) {
         {
             i++;
         }
-    while( !(str[i] != '&' && 
-             str[i] != '|' && 
-             str[i] != ';' && 
-             str[i] != '\0')) 
+    while( str[i] == '&' || 
+           str[i] == '|' || 
+           str[i] == ';' ) 
         {
             tbuf[j++] = str[i++];
         }
-    (*pla) += j;
+    (*pla) = i;
 
     if(tbuf[0] == '\0') return AE_NOLOGIC;
     else if(strcmp(tbuf, "&&") == 0) return AE_AND;
